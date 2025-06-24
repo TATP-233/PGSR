@@ -1,0 +1,29 @@
+# KITTI-360 序列00 静态场景配置
+parent_config: "../kitti360_base.yaml"
+
+# 场景特定参数
+scene_id: "seq00"
+dynamic: false
+
+# 帧范围设置（根据实际数据调整）
+frame_length: [0, 100]              # 训练帧范围
+eval_frames: [20, 40, 60, 80]       # 评估帧
+
+# 实验设置
+exp_name: "seq00_static_test"
+task_name: "lidar_pgsr_kitti360"
+
+# 针对序列00的特殊优化参数
+opt:
+  iterations: 20000                  # 适中的训练轮数
+  densify_until_iter: 10000         # 较早停止密化
+  
+  # 序列00场景的损失权重微调
+  lambda_planar: 150.0              # 增强平面约束，改善几何精度
+  lambda_depth_l1: 0.25             # 增强深度监督
+  lambda_intensity_l1: 0.75         # 适当降低强度权重平衡
+  
+# 可视化和保存设置
+visual_interval: 500
+testing_iterations: 500
+saving_iterations: [10000, 15000, 20000] 

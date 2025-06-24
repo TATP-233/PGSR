@@ -1,0 +1,25 @@
+# 快速测试配置 - 用于开发和调试
+parent_config: "kitti360/kitti360_base.yaml"
+
+# 快速测试设置
+scene_id: "quick_test"
+exp_name: "quick_debug"
+
+# 快速训练参数
+opt:
+  iterations: 1000                   # 只训练1000轮
+  densify_from_iter: 100
+  densify_until_iter: 500
+  opacity_reset_interval: 300
+  
+  # 更频繁的密化用于快速验证
+  densification_interval: 50
+  
+# 更频繁的测试和保存
+testing_iterations: 100
+saving_iterations: [500, 1000]
+visual_interval: 100
+
+# 小数据集测试
+frame_length: [0, 10]               # 只使用前10帧
+eval_frames: [2, 5, 8]              # 3个评估帧 

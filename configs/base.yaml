@@ -1,0 +1,108 @@
+# LiDAR-PGSR 基础配置文件
+# 基于PGSR和LiDAR-RT的核心参数
+
+seed: 42
+detect_anomaly: true
+
+# 模型参数
+model:
+  sh_degree: 3
+  white_background: false
+  enable_lidar: true  # 启用LiDAR模式
+  # PGSR特有参数
+  planar_constraint: true
+  geometric_regularization: true
+
+# 渲染管线参数
+pipe:
+  convert_SHs_python: false
+  compute_cov3D_python: false
+  debug: false
+  debug_from: -1
+
+# 优化参数
+opt:
+  iterations: 30000
+  
+  # 学习率设置
+  position_lr_init: 0.00016
+  position_lr_final: 0.0000016
+  position_lr_delay_mult: 0.01
+  position_lr_max_steps: 30000
+  scaling_lr: 0.005
+  rotation_lr: 0.001
+  opacity_lr: 0.05
+  feature_lr: 0.0025
+  
+  # 球谐函数设置
+  sh_increase_interval: 1000
+  
+  # 密化参数
+  densification_interval: 100
+  opacity_reset_interval: 3000
+  densify_from_iter: 500
+  densify_until_iter: 15000
+  densify_grad_threshold: 0.0002
+  densify_scale_threshold: 0.0002
+  densify_weight_threshold: 0.0
+  prune_size_threshold: 0.1
+  thresh_opa_prune: 0.003
+  
+  # PGSR几何约束损失权重
+  lambda_planar: 100.0          # 平面化损失权重
+  lambda_sv_geom: 0.015         # 单视图几何损失权重
+  lambda_mv_rgb: 0.15           # 多视图光度损失权重
+  lambda_mv_geom: 0.03          # 多视图几何损失权重
+  
+  # LiDAR损失权重
+  lambda_depth_l1: 0.1          # 深度L1损失
+  lambda_intensity_l1: 0.85     # 强度L1损失
+  lambda_intensity_l2: 0.0      # 强度L2损失
+  lambda_intensity_dssim: 0.15  # 强度DSSIM损失
+  lambda_raydrop_bce: 0.01      # Ray-drop BCE损失
+  lambda_cd: 0.01               # Chamfer距离损失
+  
+  # 正则化损失
+  lambda_reg: 0.01              # 高斯正则化损失
+  lambda_opacity_sparse: 0.0    # 透明度稀疏化损失(默认关闭)
+  sparse_after_iter: -1         # 稀疏化开始迭代(默认关闭)
+  
+  # PGSR特有参数
+  use_normal_init: true         # 使用法向量初始化
+  use_voxel_init: true          # 使用体素初始化
+  
+  # 多视图几何约束参数
+  multi_view_weight_from_iter: 2000
+  multi_view_geo_weight: 0.1
+  multi_view_ncc_weight: 0.1
+  multi_view_patch_size: 3
+  multi_view_sample_num: 1024
+  multi_view_pixel_noise_th: 1.0
+  
+  # 高级修剪参数
+  abs_split_radii2D_threshold: 3.0
+  max_abs_split_points: 2000000
+  max_all_points: 6000000
+
+# 数据加载参数
+data:
+  voxel_size: 0.15
+  bkgd_extent_factor: 3
+  object_extent_factor: 4
+  obj_pt_num: 10000
+  
+  # LiDAR特有参数
+  fov_horizontal: 6.283185307179586  # 2*pi radians (360度)
+  fov_vertical: 0.4695041508976983   # 26.9度转弧度
+  lidar_height: 66
+  lidar_width: 1030
+
+# 测试和保存参数
+testing_iterations: 1000
+saving_iterations: [15000, 20000, 25000, 30000]
+visual_interval: 1000
+
+# 输出设置
+model_dir: "output"
+task_name: "lidar_pgsr"
+exp_name: "default" 

@@ -56,8 +56,6 @@ class GaussianModel:
         self.max_sh_degree = sh_degree  
         self._xyz = torch.empty(0)
         self._knn_f = torch.empty(0)
-        self._features_dc = torch.empty(0)
-        self._features_rest = torch.empty(0)
         self._scaling = torch.empty(0)
         self._rotation = torch.empty(0)
         self._opacity = torch.empty(0)
@@ -72,6 +70,12 @@ class GaussianModel:
         self.spatial_lr_scale = 0
         self.knn_dists = None
         self.knn_idx = None
+        
+        # LiDAR专用属性 - 使用球谐函数表示intensity和raydrop的方向相关性
+        self.lidar_sh_degree = 2  # 使用2阶球谐函数
+        self._intensity_sh = torch.empty(0)  # intensity的球谐系数 
+        self._raydrop_sh = torch.empty(0)    # raydrop概率的球谐系数
+        
         self.setup_functions()
         self.use_app = False
 
@@ -80,8 +84,6 @@ class GaussianModel:
             self.active_sh_degree,
             self._xyz,
             self._knn_f,
-            self._features_dc,
-            self._features_rest,
             self._scaling,
             self._rotation,
             self._opacity,
@@ -99,8 +101,6 @@ class GaussianModel:
         (self.active_sh_degree, 
         self._xyz, 
         self._knn_f,
-        self._features_dc, 
-        self._features_rest,
         self._scaling, 
         self._rotation, 
         self._opacity,
@@ -133,14 +133,44 @@ class GaussianModel:
         return self._xyz
     
     @property
-    def get_features(self):
-        features_dc = self._features_dc
-        features_rest = self._features_rest
-        return torch.cat((features_dc, features_rest), dim=1)
-    
-    @property
     def get_opacity(self):
         return self.opacity_activation(self._opacity)
+    
+    @property 
+    def get_intensity_sh(self):
+        return self._intensity_sh
+            
+    @property
+    def get_raydrop_sh(self):
+        return self._raydrop_sh
+    
+    def get_intensity(self, viewdirs):
+        """
+        计算给定视线方向的intensity值
+        viewdirs: (N, 3) 归一化的视线方向
+        """
+        from utils.sh_utils import eval_sh
+        # 添加通道维度，使其与球谐函数兼容
+        # intensity_sh形状从 (N, 9) 变为 (N, 1, 9)
+        intensity_sh = self._intensity_sh.unsqueeze(1)  # (N, 1, 9)
+        
+        # 使用球谐函数计算intensity
+        intensity = eval_sh(self.lidar_sh_degree, intensity_sh, viewdirs)  # (N, 1)
+        return torch.sigmoid(intensity)  # 确保intensity在[0,1]范围内
+    
+    def get_raydrop_prob(self, viewdirs):
+        """
+        计算给定视线方向的raydrop概率
+        viewdirs: (N, 3) 归一化的视线方向
+        """
+        from utils.sh_utils import eval_sh
+        # 添加通道维度，使其与球谐函数兼容
+        # raydrop_sh形状从 (N, 9) 变为 (N, 1, 9)
+        raydrop_sh = self._raydrop_sh.unsqueeze(1)  # (N, 1, 9)
+        
+        # 使用球谐函数计算raydrop概率
+        raydrop = eval_sh(self.lidar_sh_degree, raydrop_sh, viewdirs)  # (N, 1)
+        return torch.sigmoid(raydrop)  # 确保概率在[0,1]范围内
     
     def get_smallest_axis(self, return_idx=False):
         rotation_matrices = self.get_rotation_matrix()
@@ -188,13 +218,26 @@ class GaussianModel:
         knn_f = torch.randn((fused_point_cloud.shape[0], 6)).float().cuda()
         self._xyz = nn.Parameter(fused_point_cloud.requires_grad_(True))
         self._knn_f = nn.Parameter(knn_f.requires_grad_(True))
-        self._features_dc = nn.Parameter(features[:,:,0:1].transpose(1, 2).contiguous().requires_grad_(True))
-        self._features_rest = nn.Parameter(features[:,:,1:].transpose(1, 2).contiguous().requires_grad_(True))
         self._scaling = nn.Parameter(scales.requires_grad_(True))
         self._rotation = nn.Parameter(rots.requires_grad_(True))
         self._opacity = nn.Parameter(opacities.requires_grad_(True))
         self.max_radii2D = torch.zeros((self.get_xyz.shape[0]), device="cuda")
         self.max_weight = torch.zeros((self.get_xyz.shape[0]), device="cuda")
+        
+        # 初始化LiDAR属性
+        num_points = fused_point_cloud.shape[0]
+        # intensity和raydrop的球谐系数数量
+        lidar_sh_coeffs = (self.lidar_sh_degree + 1) ** 2
+        
+        # 初始化intensity球谐系数 (默认中等强度)
+        intensity_sh = torch.zeros((num_points, lidar_sh_coeffs), device="cuda")
+        intensity_sh[:, 0] = inverse_sigmoid(torch.ones(num_points, device="cuda") * 0.5)  # DC分量设为0.5
+        self._intensity_sh = nn.Parameter(intensity_sh.requires_grad_(True))
+        
+        # 初始化raydrop球谐系数 (默认低概率)
+        raydrop_sh = torch.zeros((num_points, lidar_sh_coeffs), device="cuda") 
+        raydrop_sh[:, 0] = inverse_sigmoid(torch.ones(num_points, device="cuda") * 0.1)  # DC分量设为0.1
+        self._raydrop_sh = nn.Parameter(raydrop_sh.requires_grad_(True))
 
     def training_setup(self, training_args):
         self.percent_dense = training_args.percent_dense
@@ -208,13 +251,13 @@ class GaussianModel:
         l = [
             {'params': [self._xyz], 'lr': training_args.position_lr_init * self.spatial_lr_scale, "name": "xyz"},
             {'params': [self._knn_f], 'lr': 0.01, "name": "knn_f"},
-            {'params': [self._features_dc], 'lr': training_args.feature_lr, "name": "f_dc"},
-            {'params': [self._features_rest], 'lr': training_args.feature_lr / 20.0, "name": "f_rest"},
-            {'params': [self._opacity], 'lr': training_args.opacity_lr, "name": "opacity"},
             {'params': [self._scaling], 'lr': training_args.scaling_lr, "name": "scaling"},
-            {'params': [self._rotation], 'lr': training_args.rotation_lr, "name": "rotation"}
+            {'params': [self._rotation], 'lr': training_args.rotation_lr, "name": "rotation"},
+            {'params': [self._opacity], 'lr': training_args.opacity_lr, "name": "opacity"},
+            {'params': [self._intensity_sh], 'lr': training_args.feature_lr / 20.0, "name": "intensity_sh"},
+            {'params': [self._raydrop_sh], 'lr': training_args.feature_lr / 20.0, "name": "raydrop_sh"}
         ]
-
+        
         self.optimizer = torch.optim.Adam(l, lr=0.0, eps=1e-15)
         self.xyz_scheduler_args = get_expon_lr_func(lr_init=training_args.position_lr_init*self.spatial_lr_scale,
                                                     lr_final=training_args.position_lr_final*self.spatial_lr_scale,
@@ -235,11 +278,6 @@ class GaussianModel:
 
     def construct_list_of_attributes(self):
         l = ['x', 'y', 'z', 'nx', 'ny', 'nz']
-        # All channels except the 3 DC
-        for i in range(self._features_dc.shape[1]*self._features_dc.shape[2]):
-            l.append('f_dc_{}'.format(i))
-        for i in range(self._features_rest.shape[1]*self._features_rest.shape[2]):
-            l.append('f_rest_{}'.format(i))
         l.append('opacity')
         for i in range(self._scaling.shape[1]):
             l.append('scale_{}'.format(i))
@@ -252,15 +290,13 @@ class GaussianModel:
 
         xyz = self._xyz.detach().cpu().numpy()
         normals = np.zeros_like(xyz)
-        f_dc = self._features_dc.detach().transpose(1, 2).flatten(start_dim=1).contiguous().cpu().numpy()
-        f_rest = self._features_rest.detach().transpose(1, 2).flatten(start_dim=1).contiguous().cpu().numpy()
         opacities = self._opacity.detach().cpu().numpy()
         scale = self._scaling.detach().cpu().numpy()
         rotation = self._rotation.detach().cpu().numpy()
 
         dtype_full = [(attribute, 'f4') for attribute in self.construct_list_of_attributes()]
         elements = np.empty(xyz.shape[0], dtype=dtype_full)
-        attributes = np.concatenate((xyz, normals, f_dc, f_rest, opacities, scale, rotation), axis=1)
+        attributes = np.concatenate((xyz, normals, opacities, scale, rotation), axis=1)
         elements[:] = list(map(tuple, attributes))
         el = PlyElement.describe(elements, 'vertex')
         PlyData([el]).write(path)
@@ -278,20 +314,6 @@ class GaussianModel:
                         np.asarray(plydata.elements[0]["z"])),  axis=1)
         opacities = np.asarray(plydata.elements[0]["opacity"])[..., np.newaxis]
 
-        features_dc = np.zeros((xyz.shape[0], 3, 1))
-        features_dc[:, 0, 0] = np.asarray(plydata.elements[0]["f_dc_0"])
-        features_dc[:, 1, 0] = np.asarray(plydata.elements[0]["f_dc_1"])
-        features_dc[:, 2, 0] = np.asarray(plydata.elements[0]["f_dc_2"])
-
-        extra_f_names = [p.name for p in plydata.elements[0].properties if p.name.startswith("f_rest_")]
-        extra_f_names = sorted(extra_f_names, key = lambda x: int(x.split('_')[-1]))
-        assert len(extra_f_names)==3*(self.max_sh_degree + 1) ** 2 - 3
-        features_extra = np.zeros((xyz.shape[0], len(extra_f_names)))
-        for idx, attr_name in enumerate(extra_f_names):
-            features_extra[:, idx] = np.asarray(plydata.elements[0][attr_name])
-        # Reshape (P,F*SH_coeffs) to (P, F, SH_coeffs except DC)
-        features_extra = features_extra.reshape((features_extra.shape[0], 3, (self.max_sh_degree + 1) ** 2 - 1))
-
         scale_names = [p.name for p in plydata.elements[0].properties if p.name.startswith("scale_")]
         scale_names = sorted(scale_names, key = lambda x: int(x.split('_')[-1]))
         scales = np.zeros((xyz.shape[0], len(scale_names)))
@@ -305,11 +327,9 @@ class GaussianModel:
             rots[:, idx] = np.asarray(plydata.elements[0][attr_name])
 
         self._xyz = nn.Parameter(torch.tensor(xyz, dtype=torch.float, device="cuda").requires_grad_(True))
-        self._features_dc = nn.Parameter(torch.tensor(features_dc, dtype=torch.float, device="cuda").transpose(1, 2).contiguous().requires_grad_(True))
-        self._features_rest = nn.Parameter(torch.tensor(features_extra, dtype=torch.float, device="cuda").transpose(1, 2).contiguous().requires_grad_(True))
-        self._opacity = nn.Parameter(torch.tensor(opacities, dtype=torch.float, device="cuda").requires_grad_(True))
         self._scaling = nn.Parameter(torch.tensor(scales, dtype=torch.float, device="cuda").requires_grad_(True))
         self._rotation = nn.Parameter(torch.tensor(rots, dtype=torch.float, device="cuda").requires_grad_(True))
+        self._opacity = nn.Parameter(torch.tensor(opacities, dtype=torch.float, device="cuda").requires_grad_(True))
 
         self.active_sh_degree = self.max_sh_degree
 
@@ -352,11 +372,11 @@ class GaussianModel:
 
         self._xyz = optimizable_tensors["xyz"]
         self._knn_f = optimizable_tensors["knn_f"]
-        self._features_dc = optimizable_tensors["f_dc"]
-        self._features_rest = optimizable_tensors["f_rest"]
-        self._opacity = optimizable_tensors["opacity"]
         self._scaling = optimizable_tensors["scaling"]
         self._rotation = optimizable_tensors["rotation"]
+        self._opacity = optimizable_tensors["opacity"]
+        self._intensity_sh = optimizable_tensors["intensity_sh"]
+        self._raydrop_sh = optimizable_tensors["raydrop_sh"]
 
         self.xyz_gradient_accum = self.xyz_gradient_accum[valid_points_mask]
         self.xyz_gradient_accum_abs = self.xyz_gradient_accum_abs[valid_points_mask]
@@ -388,22 +408,22 @@ class GaussianModel:
 
         return optimizable_tensors
 
-    def densification_postfix(self, new_xyz, new_knn_f, new_features_dc, new_features_rest, new_opacities, new_scaling, new_rotation):
+    def densification_postfix(self, new_xyz, new_knn_f, new_scaling, new_rotation, new_opacity, new_intensity_sh, new_raydrop_sh):
         d = {"xyz": new_xyz,
         "knn_f": new_knn_f,
-        "f_dc": new_features_dc,
-        "f_rest": new_features_rest,
-        "opacity": new_opacities,
         "scaling" : new_scaling,
-        "rotation" : new_rotation}
+        "rotation" : new_rotation,
+        "opacity": new_opacity,
+        "intensity_sh": new_intensity_sh,
+        "raydrop_sh": new_raydrop_sh}
         optimizable_tensors = self.cat_tensors_to_optimizer(d)
         self._xyz = optimizable_tensors["xyz"]
         self._knn_f = optimizable_tensors["knn_f"]
-        self._features_dc = optimizable_tensors["f_dc"]
-        self._features_rest = optimizable_tensors["f_rest"]
-        self._opacity = optimizable_tensors["opacity"]
         self._scaling = optimizable_tensors["scaling"]
         self._rotation = optimizable_tensors["rotation"]
+        self._opacity = optimizable_tensors["opacity"]
+        self._intensity_sh = optimizable_tensors["intensity_sh"]
+        self._raydrop_sh = optimizable_tensors["raydrop_sh"]
 
         self.xyz_gradient_accum = torch.zeros((self.get_xyz.shape[0], 1), device="cuda")
         self.xyz_gradient_accum_abs = torch.zeros((self.get_xyz.shape[0], 1), device="cuda")
@@ -452,12 +472,12 @@ class GaussianModel:
         new_xyz = torch.bmm(rots, samples.unsqueeze(-1)).squeeze(-1) + self.get_xyz[selected_pts_mask].repeat(N, 1)
         new_scaling = self.scaling_inverse_activation(self.get_scaling[selected_pts_mask].repeat(N,1) / (0.8*N))
         new_rotation = self._rotation[selected_pts_mask].repeat(N,1)
-        new_features_dc = self._features_dc[selected_pts_mask].repeat(N,1,1)
-        new_features_rest = self._features_rest[selected_pts_mask].repeat(N,1,1)
-        new_opacity = self._opacity[selected_pts_mask].repeat(N,1)
         new_knn_f = self._knn_f[selected_pts_mask].repeat(N,1)
+        new_opacity = self._opacity[selected_pts_mask].repeat(N,1)
+        new_intensity_sh = self._intensity_sh[selected_pts_mask].repeat(N,1)
+        new_raydrop_sh = self._raydrop_sh[selected_pts_mask].repeat(N,1)
 
-        self.densification_postfix(new_xyz, new_knn_f, new_features_dc, new_features_rest, new_opacity, new_scaling, new_rotation)
+        self.densification_postfix(new_xyz, new_knn_f, new_scaling, new_rotation, new_opacity, new_intensity_sh, new_raydrop_sh)
 
         prune_filter = torch.cat((selected_pts_mask, torch.zeros(N * selected_pts_mask.sum(), device="cuda", dtype=bool)))
         self.prune_points(prune_filter)
@@ -486,14 +506,14 @@ class GaussianModel:
             rots = build_rotation(self._rotation[selected_pts_mask])
             new_xyz = torch.bmm(rots, samples.unsqueeze(-1)).squeeze(-1) + self.get_xyz[selected_pts_mask]
             
-            new_features_dc = self._features_dc[selected_pts_mask]
-            new_features_rest = self._features_rest[selected_pts_mask]
-            new_opacities = self._opacity[selected_pts_mask]
             new_scaling = self._scaling[selected_pts_mask]
             new_rotation = self._rotation[selected_pts_mask]
             new_knn_f = self._knn_f[selected_pts_mask]
+            new_opacity = self._opacity[selected_pts_mask]
+            new_intensity_sh = self._intensity_sh[selected_pts_mask]
+            new_raydrop_sh = self._raydrop_sh[selected_pts_mask]
 
-            self.densification_postfix(new_xyz, new_knn_f, new_features_dc, new_features_rest, new_opacities, new_scaling, new_rotation)
+            self.densification_postfix(new_xyz, new_knn_f, new_scaling, new_rotation, new_opacity, new_intensity_sh, new_raydrop_sh)
 
     def densify_and_prune(self, max_grad, abs_max_grad, min_opacity, extent, max_screen_size):
         grads = self.xyz_gradient_accum / self.denom
@@ -554,4 +574,47 @@ class GaussianModel:
         T = torch.tensor(fov_camera.T).float().cuda()
         pts = (pts-T)@R.transpose(-1,-2)
         return pts
+    
+    def compute_planar_loss(self):
+        """
+        计算PGSR平面化约束损失
+        鼓励高斯基元压缩为平面状（最小缩放值接近0）
+        
+        Returns:
+            loss: 平面化损失值
+        """
+        scaling = self.get_scaling  # (N, 3)
+        
+        # 计算最小缩放值的L1损失
+        min_scales = scaling.min(dim=1)[0]  # (N,)
+        planar_loss = min_scales.mean()
+        
+        return planar_loss
+    
+    def compute_sv_geometry_loss(self, rendered_normal, depth_normal, image_grad=None):
+        """
+        计算PGSR单视图几何正则化损失
+        
+        Args:
+            rendered_normal: (3, H, W) 渲染的法向量
+            depth_normal: (3, H, W) 从深度计算的法向量  
+            image_grad: (H, W) 图像梯度（可选，用于边缘感知）
+            
+        Returns:
+            loss: 单视图几何损失
+        """
+        if rendered_normal is None or depth_normal is None:
+            return torch.tensor(0.0, device="cuda")
+            
+        # 计算法向量差异
+        normal_diff = torch.abs(rendered_normal - depth_normal).sum(0)  # (H, W)
+        
+        if image_grad is not None:
+            # 边缘感知权重：在图像边缘处减少几何约束
+            edge_weight = (1.0 - image_grad).clamp(0, 1) ** 2
+            sv_loss = (edge_weight * normal_diff).mean()
+        else:
+            sv_loss = normal_diff.mean()
+            
+        return sv_loss
     

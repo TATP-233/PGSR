@@ -28,8 +28,8 @@ class CameraInfo(NamedTuple):
     global_id: int
     R: np.array
     T: np.array
-    FovY: np.array
-    FovX: np.array
+    FovY: float
+    FovX: float
     image_path: str
     image_name: str
     width: int
@@ -43,6 +43,7 @@ class SceneInfo(NamedTuple):
     test_cameras: list
     nerf_normalization: dict
     ply_path: str
+    lidar_data: dict = None  # 添加LiDAR数据字段
 
 def getNerfppNorm(cam_info):
     def get_center_and_diag(cam_centers):
@@ -204,7 +205,8 @@ def readColmapSceneInfo(path, images, eval, llffhold=8):
                            train_cameras=train_cam_infos,
                            test_cameras=test_cam_infos,
                            nerf_normalization=nerf_normalization,
-                           ply_path=ply_path)
+                           ply_path=ply_path,
+                           lidar_data=None)
     return scene_info
 
 def readCamerasFromTransforms(path, transformsfile, white_background, extension=".png"):
@@ -282,10 +284,259 @@ def readNerfSyntheticInfo(path, white_background, eval, extension=".png"):
                            train_cameras=train_cam_infos,
                            test_cameras=test_cam_infos,
                            nerf_normalization=nerf_normalization,
-                           ply_path=ply_path)
+                           ply_path=ply_path,
+                           lidar_data=None)
+    return scene_info
+
+def readKitti360SceneInfo(path, images=None, eval=False, args=None):
+    """
+    读取KITTI-360数据集，包含LiDAR点云和位姿信息
+    适配LiDAR-RT的数据格式到PGSR的Scene结构
+    """
+    import math
+    from pathlib import Path
+    
+    # 设置默认参数
+    if args is None:
+        class DefaultArgs:
+            seq = "0000"
+            frame_length = [0, 100]  # 默认帧范围
+            data_type = "range_image"
+        args = DefaultArgs()
+    
+    # 获取序列信息
+    seq = getattr(args, 'seq', "0000")
+    frames = getattr(args, 'frame_length', [0, 100])
+    full_seq = f"2013_05_28_drive_{seq}_sync"
+    
+    print(f"Loading KITTI-360 sequence: {full_seq}, frames: {frames}")
+    
+    # LiDAR传感器参数（来自LiDAR-RT）
+    W, H = 1030, 66
+    inc_bottom, inc_top = math.radians(-24.9), math.radians(2.0)
+    azimuth_left, azimuth_right = np.pi, -np.pi
+    max_depth = 80.0
+    h_res = (azimuth_right - azimuth_left) / W
+    v_res = (inc_bottom - inc_top) / H
+    
+    # 加载位姿数据
+    pose_file = os.path.join(path, "data_pose", full_seq, "poses.txt")
+    if not os.path.exists(pose_file):
+        raise FileNotFoundError(f"Pose file not found: {pose_file}")
+        
+    ego2world = {}
+    with open(pose_file, "r") as file:
+        lines = file.readlines()
+    
+    for line in lines:
+        parts = line.split()
+        frame = int(parts[0])
+        if frames[0] <= frame <= frames[1]:  # 只加载指定帧范围
+            values = [float(x) for x in parts[1:]]
+            matrix = np.array(values).reshape(3, 4)  # (3, 4)
+            # 转换为4x4齐次变换矩阵
+            matrix_4x4 = np.eye(4)
+            matrix_4x4[:3, :] = matrix
+            ego2world[frame] = matrix_4x4
+    
+    # LiDAR到ego的变换矩阵（来自LiDAR-RT）
+    cam2velo = np.array([
+        0.04307104361, -0.08829286498, 0.995162929, 0.8043914418,
+        -0.999004371, 0.007784614041, 0.04392796942, 0.2993489574,
+        -0.01162548558, -0.9960641394, -0.08786966659, -0.1770225824,
+        0.0, 0.0, 0.0, 1.0
+    ]).reshape(4, 4)
+    
+    cam2ego = np.array([
+        0.0371783278, -0.0986182135, 0.9944306009, 1.5752681039,
+        0.9992675562, -0.0053553387, -0.0378902567, 0.0043914093,
+        0.0090621821, 0.9951109327, 0.0983468786, -0.6500000000,
+        0.0, 0.0, 0.0, 1.0
+    ]).reshape(4, 4)
+    
+    lidar2ego = cam2ego @ np.linalg.inv(cam2velo)
+    
+    # 创建虚拟相机信息（用于适配PGSR的相机系统）
+    # 每一帧LiDAR数据对应一个虚拟相机
+    cam_infos = []
+    lidar_data = {}  # 存储LiDAR数据
+    
+    lidar_dir = os.path.join(path, "data_3d_raw", full_seq, "velodyne_points", "data")
+    if not os.path.exists(lidar_dir):
+        raise FileNotFoundError(f"LiDAR data directory not found: {lidar_dir}")
+    
+    valid_frames = []
+    for frame in range(frames[0], frames[1] + 1):
+        lidar_file = os.path.join(lidar_dir, f"{str(frame).zfill(10)}.bin")
+        if os.path.exists(lidar_file) and frame in ego2world:
+            valid_frames.append(frame)
+    
+    print(f"Found {len(valid_frames)} valid frames with both LiDAR and pose data")
+    
+    for idx, frame in enumerate(valid_frames):
+        # 加载LiDAR点云数据
+        lidar_file = os.path.join(lidar_dir, f"{str(frame).zfill(10)}.bin")
+        with open(lidar_file, "rb") as f:
+            points = np.fromfile(f, dtype=np.float32).reshape(-1, 4)
+        
+        xyzs, intensities = points[:, :3], points[:, 3]
+        dists = np.linalg.norm(xyzs, axis=1)
+        
+        # 转换到Range Image
+        azimuth = np.arctan2(xyzs[:, 1], xyzs[:, 0])
+        inclination = np.arctan2(xyzs[:, 2], np.sqrt(xyzs[:, 0]**2 + xyzs[:, 1]**2))
+        
+        w_idx = np.round((azimuth - azimuth_left) / h_res).astype(int)
+        h_idx = np.round((inclination - inc_top) / v_res).astype(int)
+        
+        valid_mask = (dists <= max_depth) & (w_idx >= 0) & (w_idx < W) & (h_idx >= 0) & (h_idx < H)
+        
+        # 创建range image
+        range_map = np.ones((H, W)) * -1
+        intensity_map = np.ones((H, W)) * -1
+        
+        if np.any(valid_mask):
+            valid_h = h_idx[valid_mask]
+            valid_w = w_idx[valid_mask]
+            valid_dists = dists[valid_mask]
+            valid_intensities = intensities[valid_mask]
+            
+            # 对于重复像素，保留最近的点
+            indices = np.lexsort((valid_dists, valid_h, valid_w))
+            valid_h = valid_h[indices]
+            valid_w = valid_w[indices]
+            valid_dists = valid_dists[indices]
+            valid_intensities = valid_intensities[indices]
+            
+            _, unique_idx = np.unique(np.column_stack((valid_h, valid_w)), axis=0, return_index=True)
+            
+            range_map[valid_h[unique_idx], valid_w[unique_idx]] = valid_dists[unique_idx]
+            intensity_map[valid_h[unique_idx], valid_w[unique_idx]] = valid_intensities[unique_idx]
+        
+        # 将-1替换为0
+        range_map[range_map == -1] = 0
+        intensity_map[intensity_map == -1] = 0
+        
+        # 存储LiDAR数据
+        lidar_data[frame] = {
+            'range_image': range_map,
+            'intensity_image': intensity_map,
+            'raw_points': points,
+            'lidar2ego': lidar2ego,
+            'ego2world': ego2world[frame]
+        }
+        
+        # 创建虚拟相机参数
+        # 计算世界坐标下的LiDAR位置
+        ego2world_matrix = ego2world[frame]
+        lidar2world = ego2world_matrix @ lidar2ego
+        
+        # 提取旋转和平移
+        R = lidar2world[:3, :3].T  # PGSR expects transposed rotation
+        T = lidar2world[:3, 3]
+        
+        # 虚拟相机内参（基于Range Image的分辨率）
+        fx = W / (2 * np.pi)  # 水平方向的焦距
+        fy = H / (inc_top - inc_bottom)  # 垂直方向的焦距
+        
+        FovX = 2 * np.pi  # 水平视场角360度
+        FovY = inc_top - inc_bottom  # 垂直视场角
+        
+        # 创建CameraInfo
+        cam_info = CameraInfo(
+            uid=idx,
+            global_id=frame,
+            R=R,
+            T=T,
+            FovY=FovY,
+            FovX=FovX,
+            image_path=f"frame_{frame:06d}",  # 虚拟路径
+            image_name=f"frame_{frame:06d}",
+            width=W,
+            height=H,
+            fx=fx,
+            fy=fy
+        )
+        cam_infos.append(cam_info)
+    
+    # 划分训练和测试集
+    if eval:
+        # 简单的8:2划分
+        split_idx = int(len(cam_infos) * 0.8)
+        train_cam_infos = cam_infos[:split_idx]
+        test_cam_infos = cam_infos[split_idx:]
+    else:
+        train_cam_infos = cam_infos
+        test_cam_infos = []
+    
+    print(f"Training cameras: {len(train_cam_infos)}, Test cameras: {len(test_cam_infos)}")
+    
+    # 计算场景归一化参数
+    nerf_normalization = getNerfppNorm(train_cam_infos)
+    
+    # 从LiDAR数据生成初始点云
+    ply_path = os.path.join(path, "lidar_points3d.ply")
+    
+    all_points = []
+    all_colors = []
+    
+    # 从部分LiDAR帧采样点云
+    sample_frames = valid_frames[::max(1, len(valid_frames)//10)]  # 最多采样10帧
+    
+    for frame in sample_frames:
+        points = lidar_data[frame]['raw_points']
+        ego2world_matrix = lidar_data[frame]['ego2world']
+        lidar2ego_matrix = lidar_data[frame]['lidar2ego']
+        
+        # 转换到世界坐标系
+        xyzs = points[:, :3]
+        intensities = points[:, 3]
+        
+        # 添加齐次坐标
+        xyzs_homo = np.hstack([xyzs, np.ones((xyzs.shape[0], 1))])
+        
+        # 变换到世界坐标系
+        world_points = (ego2world_matrix @ lidar2ego_matrix @ xyzs_homo.T).T[:, :3]
+        
+        # 根据强度生成颜色
+        colors = np.stack([intensities, intensities, intensities], axis=1)
+        colors = np.clip(colors / np.max(intensities), 0, 1)  # 归一化
+        
+        # 下采样以减少点数
+        step = max(1, len(world_points) // 10000)  # 每帧最多1万个点
+        all_points.append(world_points[::step])
+        all_colors.append(colors[::step])
+    
+    if all_points:
+        all_points = np.vstack(all_points)
+        all_colors = np.vstack(all_colors)
+        
+        print(f"Generated point cloud with {len(all_points)} points")
+        storePly(ply_path, all_points, (all_colors * 255).astype(np.uint8))
+        pcd = BasicPointCloud(points=all_points, colors=all_colors, normals=np.zeros_like(all_points))
+    else:
+        print("Warning: No valid LiDAR points found, creating random point cloud")
+        # 创建随机点云作为fallback
+        num_pts = 100_000
+        xyz = np.random.random((num_pts, 3)) * 20 - 10  # 适合KITTI场景的范围
+        colors = np.random.random((num_pts, 3))
+        pcd = BasicPointCloud(points=xyz, colors=colors, normals=np.zeros((num_pts, 3)))
+        storePly(ply_path, xyz, (colors * 255).astype(np.uint8))
+    
+    # 创建包含LiDAR数据的SceneInfo
+    scene_info = SceneInfo(
+        point_cloud=pcd,
+        train_cameras=train_cam_infos,
+        test_cameras=test_cam_infos,
+        nerf_normalization=nerf_normalization,
+        ply_path=ply_path,
+        lidar_data=lidar_data
+    )
+    
     return scene_info
 
 sceneLoadTypeCallbacks = {
     "Colmap": readColmapSceneInfo,
-    "Blender" : readNerfSyntheticInfo
+    "Blender": readNerfSyntheticInfo,
+    "Kitti360": readKitti360SceneInfo
 }

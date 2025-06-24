@@ -16,7 +16,7 @@ import sys
 
 WARNED = False
 
-def loadCam(args, id, cam_info, resolution_scale):
+def loadCam(args, id, cam_info, resolution_scale, lidar_data=None):
     orig_w, orig_h = cam_info.width, cam_info.height
     if args.resolution in [1, 2, 4, 8]:
         resolution = round(orig_w/(resolution_scale * args.resolution)), round(orig_h/(resolution_scale * args.resolution))
@@ -42,6 +42,11 @@ def loadCam(args, id, cam_info, resolution_scale):
     sys.stdout.write("load camera {}".format(id))
     sys.stdout.flush()
 
+    # 获取对应相机的LiDAR数据（如果有的话）
+    cam_lidar_data = None
+    if lidar_data is not None and hasattr(cam_info, 'global_id') and cam_info.global_id in lidar_data:
+        cam_lidar_data = lidar_data[cam_info.global_id]
+
     return Camera(colmap_id=cam_info.uid, R=cam_info.R, T=cam_info.T, 
                   FoVx=cam_info.FovX, FoVy=cam_info.FovY,
                   image_width=resolution[0], image_height=resolution[1],
@@ -49,13 +54,14 @@ def loadCam(args, id, cam_info, resolution_scale):
                   image_name=cam_info.image_name, uid=cam_info.global_id, 
                   preload_img=args.preload_img, 
                   ncc_scale=args.ncc_scale,
-                  data_device=args.data_device)
+                  data_device=args.data_device,
+                  lidar_data=cam_lidar_data)
 
-def cameraList_from_camInfos(cam_infos, resolution_scale, args):
+def cameraList_from_camInfos(cam_infos, resolution_scale, args, lidar_data=None):
     camera_list = []
 
     for id, c in enumerate(cam_infos):
-        camera_list.append(loadCam(args, id, c, resolution_scale))
+        camera_list.append(loadCam(args, id, c, resolution_scale, lidar_data))
 
     return camera_list
 

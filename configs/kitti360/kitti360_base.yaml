@@ -1,0 +1,36 @@
+# KITTI-360数据集基础配置
+parent_config: "../base.yaml"
+
+# 数据集特定参数
+data_type: "KITTI360"
+source_dir: "data/kitti360/seq00"
+
+# KITTI-360特有的数据参数
+data:
+  # 覆盖基础配置的LiDAR参数以匹配KITTI-360
+  lidar_height: 66
+  lidar_width: 1030
+  fov_horizontal: 6.283185307179586  # 360度
+  fov_vertical: 0.4695041508976983   # 26.9度
+  
+  # KITTI-360点云处理参数
+  max_range: 80.0                    # 最大LiDAR距离
+  min_range: 1.0                     # 最小LiDAR距离
+  intensity_range: [0.0, 1.0]       # 强度值范围
+  
+  # 点云预处理
+  point_cloud_range: [-100, -100, -5, 100, 100, 5]  # [x_min, y_min, z_min, x_max, y_max, z_max]
+  use_ground_removal: false          # 是否移除地面点
+  use_intensity_normalization: true  # 是否标准化强度值
+
+# KITTI-360优化的训练参数
+opt:
+  # 针对KITTI-360调优的损失权重
+  lambda_depth_l1: 0.2              # 深度损失适当增强
+  lambda_intensity_l1: 0.8          # 强度损失保持主导
+  lambda_raydrop_bce: 0.015          # Ray-drop损失稍微增强
+  lambda_cd: 0.02                   # Chamfer距离损失增强
+  
+  # KITTI-360场景的特殊设置
+  densify_grad_threshold: 0.0001     # 更精细的密化阈值
+  thresh_opa_prune: 0.005            # 更保守的修剪阈值 

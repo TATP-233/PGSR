@@ -48,8 +48,14 @@ class Scene:
         elif os.path.exists(os.path.join(args.source_path, "transforms_train.json")):
             print("Found transforms_train.json file, assuming Blender data set!")
             scene_info = sceneLoadTypeCallbacks["Blender"](args.source_path, args.white_background, args.eval)
+        elif os.path.exists(os.path.join(args.source_path, "data_3d_raw")):
+            print("Found data_3d_raw folder, assuming KITTI-360 dataset!")
+            scene_info = sceneLoadTypeCallbacks["Kitti360"](args.source_path, args.images, args.eval, args)
         else:
             assert False, "Could not recognize scene type!"
+
+        # 保存LiDAR数据引用
+        self.lidar_data = getattr(scene_info, 'lidar_data', None)
 
         if not self.loaded_iter:
             with open(scene_info.ply_path, 'rb') as src_file, open(os.path.join(self.model_path, "input.ply") , 'wb') as dest_file:
@@ -75,9 +81,9 @@ class Scene:
         self.multi_view_num = args.multi_view_num
         for resolution_scale in resolution_scales:
             print("Loading Training Cameras")
-            self.train_cameras[resolution_scale] = cameraList_from_camInfos(scene_info.train_cameras, resolution_scale, args)
+            self.train_cameras[resolution_scale] = cameraList_from_camInfos(scene_info.train_cameras, resolution_scale, args, self.lidar_data)
             print("Loading Test Cameras")
-            self.test_cameras[resolution_scale] = cameraList_from_camInfos(scene_info.test_cameras, resolution_scale, args)
+            self.test_cameras[resolution_scale] = cameraList_from_camInfos(scene_info.test_cameras, resolution_scale, args, self.lidar_data)
             
             print("computing nearest_id")
             self.world_view_transforms = []

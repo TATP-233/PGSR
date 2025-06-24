@@ -54,7 +54,9 @@ class Camera(nn.Module):
                  image_path, image_name, uid,
                  trans=np.array([0.0, 0.0, 0.0]), scale=1.0, 
                  ncc_scale=1.0,
-                 preload_img=True, data_device = "cuda"
+                 preload_img=True, data_device = "cuda",
+                 # LiDAR特定参数
+                 lidar_data=None
                  ):
         super(Camera, self).__init__()
         self.uid = uid
@@ -90,6 +92,18 @@ class Camera(nn.Module):
             self.original_image_gray = gray_image.to(self.data_device)
             self.mask = loaded_mask
 
+        # LiDAR数据存储
+        self.lidar_data = lidar_data
+        if self.lidar_data is not None:
+            # 将LiDAR数据转移到device
+            self.range_image = torch.tensor(self.lidar_data['range_image'], dtype=torch.float32).to(self.data_device)
+            self.intensity_image = torch.tensor(self.lidar_data['intensity_image'], dtype=torch.float32).to(self.data_device)
+            # 可选：预计算掩码
+            self.valid_mask = (self.range_image > 0).to(self.data_device)
+        else:
+            self.range_image = None
+            self.intensity_image = None
+            self.valid_mask = None
 
         self.zfar = 100.0
         self.znear = 0.01
@@ -102,6 +116,30 @@ class Camera(nn.Module):
         self.full_proj_transform = (self.world_view_transform.unsqueeze(0).bmm(self.projection_matrix.unsqueeze(0))).squeeze(0)
         self.camera_center = self.world_view_transform.inverse()[3, :3]
         self.plane_mask, self.non_plane_mask = None, None
+
+    def get_lidar_data(self):
+        """
+        获取LiDAR数据
+        
+        Returns:
+            dict: 包含range_image、intensity_image等LiDAR数据
+        """
+        if self.lidar_data is None:
+            return {}
+        
+        lidar_dict = {
+            'range_image': self.range_image,
+            'intensity_image': self.intensity_image,
+            'valid_mask': self.valid_mask
+        }
+        
+        # 如果有额外的LiDAR数据字段，也添加进去
+        if 'points' in self.lidar_data:
+            lidar_dict['points'] = self.lidar_data['points']
+        if 'pose' in self.lidar_data:
+            lidar_dict['pose'] = self.lidar_data['pose']
+            
+        return lidar_dict
 
     def get_image(self):
         if self.preload_img:
