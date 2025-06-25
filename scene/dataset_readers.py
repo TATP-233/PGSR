@@ -10,32 +10,28 @@
 #
 
 import os
-import sys
-from PIL import Image
-from typing import NamedTuple
-from scene.colmap_loader import read_extrinsics_text, read_intrinsics_text, qvec2rotmat, \
-    read_extrinsics_binary, read_intrinsics_binary, read_points3D_binary, read_points3D_text
-from utils.graphics_utils import getWorld2View2, focal2fov, fov2focal
 import numpy as np
-import json
+from typing import NamedTuple
 from pathlib import Path
 from plyfile import PlyData, PlyElement
+import torch
+from utils.graphics_utils import getWorld2View2, focal2fov, fov2focal, BasicPointCloud
 from utils.sh_utils import SH2RGB
-from scene.gaussian_model import BasicPointCloud
 
 class CameraInfo(NamedTuple):
     uid: int
-    global_id: int
     R: np.array
     T: np.array
-    FovY: float
-    FovX: float
+    FoVY: float
+    FoVX: float
+    image: object
     image_path: str
     image_name: str
     width: int
     height: int
-    fx: float
-    fy: float
+    lidar_path: str = None
+    horizontal_fov_start: float = 0.0
+    horizontal_fov_end: float = 360.0
 
 class SceneInfo(NamedTuple):
     point_cloud: BasicPointCloud
@@ -68,66 +64,6 @@ def getNerfppNorm(cam_info):
 
     return {"translate": translate, "radius": radius}
 
-def load_poses(pose_path, num):
-    poses = []
-    with open(pose_path, "r") as f:
-        lines = f.readlines()
-    for i in range(num):
-        line = lines[i]
-        c2w = np.array(list(map(float, line.split()))).reshape(4, 4)
-        c2w[:3,3] = c2w[:3,3] * 10.0
-        w2c = np.linalg.inv(c2w)
-        w2c = w2c
-        poses.append(w2c)
-    poses = np.stack(poses, axis=0)
-    return poses
-
-def readColmapCameras(cam_extrinsics, cam_intrinsics, images_folder):
-    cam_infos = []
-    for idx, key in enumerate(cam_extrinsics):
-        sys.stdout.write('\r')
-        # the exact output you're looking for:
-        sys.stdout.write("Reading camera {}/{}".format(idx+1, len(cam_extrinsics)))
-        sys.stdout.flush()
-
-        extr = cam_extrinsics[key]
-        intr = cam_intrinsics[extr.camera_id]
-        height = intr.height
-        width = intr.width
-
-        uid = intr.id
-        R = np.transpose(qvec2rotmat(extr.qvec))
-        T = np.array(extr.tvec)
-
-        if intr.model=="SIMPLE_PINHOLE":
-            focal_length_x = intr.params[0]
-            FovY = focal2fov(focal_length_x, height)
-            FovX = focal2fov(focal_length_x, width)
-        elif intr.model=="PINHOLE":
-            focal_length_x = intr.params[0]
-            focal_length_y = intr.params[1]
-            FovY = focal2fov(focal_length_y, height)
-            FovX = focal2fov(focal_length_x, width)
-        else:
-            assert False, "Colmap camera model not handled: only undistorted datasets (PINHOLE or SIMPLE_PINHOLE cameras) supported!"
-
-        image_path = os.path.join(images_folder, os.path.basename(extr.name))
-        image_name = os.path.basename(image_path).split(".")[0]
-
-        cam_info = CameraInfo(uid=uid, global_id=idx, R=R, T=T, FovY=FovY, FovX=FovX,
-                              image_path=image_path, image_name=image_name, 
-                              width=width, height=height, fx=focal_length_x, fy=focal_length_y)
-        cam_infos.append(cam_info)
-    sys.stdout.write('\n')
-    return cam_infos
-
-def fetchPly(path):
-    plydata = PlyData.read(path)
-    vertices = plydata['vertex']
-    positions = np.vstack([vertices['x'], vertices['y'], vertices['z']]).T
-    colors = np.vstack([vertices['red'], vertices['green'], vertices['blue']]).T / 255.0
-    normals = np.vstack([vertices['nx'], vertices['ny'], vertices['nz']]).T
-    return BasicPointCloud(points=positions, colors=colors, normals=normals)
 
 def storePly(path, xyz, rgb):
     # Define the dtype for the structured array
@@ -146,167 +82,33 @@ def storePly(path, xyz, rgb):
     ply_data = PlyData([vertex_element])
     ply_data.write(path)
 
-def readColmapSceneInfo(path, images, eval, llffhold=8):
-    try:
-        cameras_extrinsic_file = os.path.join(path, "sparse", "images.bin")
-        cameras_intrinsic_file = os.path.join(path, "sparse", "cameras.bin")
-        cam_extrinsics = read_extrinsics_binary(cameras_extrinsic_file)
-        cam_intrinsics = read_intrinsics_binary(cameras_intrinsic_file)
-    except:
-        cameras_extrinsic_file = os.path.join(path, "sparse", "images.txt")
-        cameras_intrinsic_file = os.path.join(path, "sparse", "cameras.txt")
-        cam_extrinsics = read_extrinsics_text(cameras_extrinsic_file)
-        cam_intrinsics = read_intrinsics_text(cameras_intrinsic_file)
-    reading_dir = "images" if images == None else images
-    cam_infos_unsorted = readColmapCameras(cam_extrinsics=cam_extrinsics, cam_intrinsics=cam_intrinsics, images_folder=os.path.join(path, reading_dir))
-    # cam_infos = sorted(cam_infos_unsorted.copy(), key = lambda x : int(x.image_name.split('_')[-1]))
-    cam_infos = sorted(cam_infos_unsorted.copy(), key = lambda x : x.image_name)
-    
-    js_file = f"{path}/split.json"
-    train_list = None
-    test_list = None
-    if os.path.exists(js_file):
-        with open(js_file) as file:
-            meta = json.load(file)
-            train_list = meta["train"]
-            test_list = meta["test"]
-            print(f"train_list {len(train_list)}, test_list {len(test_list)}")
 
-    if train_list is not None:
-        train_cam_infos = [c for idx, c in enumerate(cam_infos) if c.image_name in train_list]
-        test_cam_infos = [c for idx, c in enumerate(cam_infos) if c.image_name in test_list]
-        print(f"train_cam_infos {len(train_cam_infos)}, test_cam_infos {len(test_cam_infos)}")
-    elif eval:
-        train_cam_infos = [c for idx, c in enumerate(cam_infos) if idx % llffhold != 0]
-        test_cam_infos = [c for idx, c in enumerate(cam_infos) if idx % llffhold == 0]
-    else:
-        train_cam_infos = cam_infos
-        test_cam_infos = []
-
-    nerf_normalization = getNerfppNorm(train_cam_infos)
-
-    ply_path = os.path.join(path, "sparse/points3D.ply")
-    bin_path = os.path.join(path, "sparse/points3D.bin")
-    txt_path = os.path.join(path, "sparse/points3D.txt")
-    if not os.path.exists(ply_path) or True:
-        print("Converting point3d.bin to .ply, will happen only the first time you open the scene.")
-        try:
-            xyz, rgb, _ = read_points3D_binary(bin_path)
-            print(f"xyz {xyz.shape}")
-        except:
-            xyz, rgb, _ = read_points3D_text(txt_path)
-        storePly(ply_path, xyz, rgb)
-    try:
-        pcd = fetchPly(ply_path)
-    except:
-        pcd = None
-
-    scene_info = SceneInfo(point_cloud=pcd,
-                           train_cameras=train_cam_infos,
-                           test_cameras=test_cam_infos,
-                           nerf_normalization=nerf_normalization,
-                           ply_path=ply_path,
-                           lidar_data=None)
-    return scene_info
-
-def readCamerasFromTransforms(path, transformsfile, white_background, extension=".png"):
-    cam_infos = []
-
-    with open(os.path.join(path, transformsfile)) as json_file:
-        contents = json.load(json_file)
-        fovx = contents["camera_angle_x"]
-
-        frames = contents["frames"]
-        for idx, frame in enumerate(frames):
-            cam_name = os.path.join(path, frame["file_path"] + extension)
-
-            # NeRF 'transform_matrix' is a camera-to-world transform
-            c2w = np.array(frame["transform_matrix"])
-            # change from OpenGL/Blender camera axes (Y up, Z back) to COLMAP (Y down, Z forward)
-            c2w[:3, 1:3] *= -1
-
-            # get the world-to-camera transform and set R, T
-            w2c = np.linalg.inv(c2w)
-            R = np.transpose(w2c[:3,:3])  # R is stored transposed due to 'glm' in CUDA code
-            T = w2c[:3, 3]
-
-            image_path = os.path.join(path, cam_name)
-            image_name = Path(cam_name).stem
-            image = Image.open(image_path)
-
-            im_data = np.array(image.convert("RGBA"))
-
-            bg = np.array([1,1,1]) if white_background else np.array([0, 0, 0])
-
-            norm_data = im_data / 255.0
-            arr = norm_data[:,:,:3] * norm_data[:, :, 3:4] + bg * (1 - norm_data[:, :, 3:4])
-            image = Image.fromarray(np.array(arr*255.0, dtype=np.byte), "RGB")
-
-            fovy = focal2fov(fov2focal(fovx, image.size[0]), image.size[1])
-            FovY = fovy 
-            FovX = fovx
-
-            cam_infos.append(CameraInfo(uid=idx, global_id=idx, R=R, T=T, FovY=FovY, FovX=FovX, image=image,
-                            image_path=image_path, image_name=image_name, width=image.size[0], height=image.size[1]))
-            
-    return cam_infos
-
-def readNerfSyntheticInfo(path, white_background, eval, extension=".png"):
-    print("Reading Training Transforms")
-    train_cam_infos = readCamerasFromTransforms(path, "transforms_train.json", white_background, extension)
-    print("Reading Test Transforms")
-    test_cam_infos = readCamerasFromTransforms(path, "transforms_test.json", white_background, extension)
-    
-    if not eval:
-        train_cam_infos.extend(test_cam_infos)
-        test_cam_infos = []
-
-    nerf_normalization = getNerfppNorm(train_cam_infos)
-
-    ply_path = os.path.join(path, "points3d.ply")
-    if not os.path.exists(ply_path):
-        # Since this data set has no colmap data, we start with random points
-        num_pts = 100_000
-        print(f"Generating random point cloud ({num_pts})...")
-        
-        # We create random points inside the bounds of the synthetic Blender scenes
-        xyz = np.random.random((num_pts, 3)) * 2.6 - 1.3
-        shs = np.random.random((num_pts, 3)) / 255.0
-        pcd = BasicPointCloud(points=xyz, colors=SH2RGB(shs), normals=np.zeros((num_pts, 3)))
-
-        storePly(ply_path, xyz, SH2RGB(shs) * 255)
-    try:
-        pcd = fetchPly(ply_path)
-    except:
-        pcd = None
-
-    scene_info = SceneInfo(point_cloud=pcd,
-                           train_cameras=train_cam_infos,
-                           test_cameras=test_cam_infos,
-                           nerf_normalization=nerf_normalization,
-                           ply_path=ply_path,
-                           lidar_data=None)
-    return scene_info
-
-def readKitti360SceneInfo(path, images=None, eval=False, args=None):
+def readKITTI360Info(path, images=None, eval=False, args=None, cam_split_mode="triple"):
     """
-    读取KITTI-360数据集，包含LiDAR点云和位姿信息
-    适配LiDAR-RT的数据格式到PGSR的Scene结构
+    读取KITTI-360数据集信息
+    
+    Args:
+        path: 数据集根目录
+        images: 图像路径（LiDAR模式下不使用）
+        eval: 是否为评估模式
+        args: 参数对象，包含seq、frame_length等
+        cam_split_mode: 相机分割模式，"single"为单个360度相机，"triple"为三个120度相机
     """
+    print(f"Found data_3d_raw folder, assuming KITTI-360 dataset!")
+    
     import math
     from pathlib import Path
     
-    # 设置默认参数
-    if args is None:
-        class DefaultArgs:
-            seq = "0000"
-            frame_length = [0, 100]  # 默认帧范围
-            data_type = "range_image"
-        args = DefaultArgs()
+    # 从args获取参数
+    frames = args.frame_length if hasattr(args, 'frame_length') else [0, 100]
+    seq = args.seq if hasattr(args, 'seq') else "0000"
     
-    # 获取序列信息
-    seq = getattr(args, 'seq', "0000")
-    frames = getattr(args, 'frame_length', [0, 100])
+    if hasattr(args, 'seq') and args.seq:
+        seq = args.seq
+    else:
+        seq = "0000"  # 默认序列
+    
+    print(f"Using frame range: {frames}, sequence: {seq}")
     full_seq = f"2013_05_28_drive_{seq}_sync"
     
     print(f"Loading KITTI-360 sequence: {full_seq}, frames: {frames}")
@@ -365,108 +167,192 @@ def readKitti360SceneInfo(path, images=None, eval=False, args=None):
     if not os.path.exists(lidar_dir):
         raise FileNotFoundError(f"LiDAR data directory not found: {lidar_dir}")
     
-    valid_frames = []
+    # 获取LiDAR文件列表
+    lidar_files = {}
     for frame in range(frames[0], frames[1] + 1):
         lidar_file = os.path.join(lidar_dir, f"{str(frame).zfill(10)}.bin")
-        if os.path.exists(lidar_file) and frame in ego2world:
+        if os.path.exists(lidar_file):
+            lidar_files[frame] = lidar_file
+    
+    valid_frames = []
+    for frame in range(frames[0], frames[1] + 1):
+        if frame in lidar_files and frame in ego2world:
             valid_frames.append(frame)
+            
+            # 加载并存储LiDAR数据
+            with open(lidar_files[frame], "rb") as f:
+                points = np.fromfile(f, dtype=np.float32).reshape(-1, 4)
+            
+            lidar_data[frame] = {
+                'raw_points': points,
+                'lidar2ego': lidar2ego,
+                'ego2world': ego2world[frame]
+            }
     
     print(f"Found {len(valid_frames)} valid frames with both LiDAR and pose data")
     
-    for idx, frame in enumerate(valid_frames):
-        # 加载LiDAR点云数据
-        lidar_file = os.path.join(lidar_dir, f"{str(frame).zfill(10)}.bin")
-        with open(lidar_file, "rb") as f:
-            points = np.fromfile(f, dtype=np.float32).reshape(-1, 4)
-        
-        xyzs, intensities = points[:, :3], points[:, 3]
-        dists = np.linalg.norm(xyzs, axis=1)
-        
-        # 转换到Range Image
-        azimuth = np.arctan2(xyzs[:, 1], xyzs[:, 0])
-        inclination = np.arctan2(xyzs[:, 2], np.sqrt(xyzs[:, 0]**2 + xyzs[:, 1]**2))
-        
-        w_idx = np.round((azimuth - azimuth_left) / h_res).astype(int)
-        h_idx = np.round((inclination - inc_top) / v_res).astype(int)
-        
-        valid_mask = (dists <= max_depth) & (w_idx >= 0) & (w_idx < W) & (h_idx >= 0) & (h_idx < H)
-        
-        # 创建range image
-        range_map = np.ones((H, W)) * -1
-        intensity_map = np.ones((H, W)) * -1
-        
-        if np.any(valid_mask):
-            valid_h = h_idx[valid_mask]
-            valid_w = w_idx[valid_mask]
-            valid_dists = dists[valid_mask]
-            valid_intensities = intensities[valid_mask]
-            
-            # 对于重复像素，保留最近的点
-            indices = np.lexsort((valid_dists, valid_h, valid_w))
-            valid_h = valid_h[indices]
-            valid_w = valid_w[indices]
-            valid_dists = valid_dists[indices]
-            valid_intensities = valid_intensities[indices]
-            
-            _, unique_idx = np.unique(np.column_stack((valid_h, valid_w)), axis=0, return_index=True)
-            
-            range_map[valid_h[unique_idx], valid_w[unique_idx]] = valid_dists[unique_idx]
-            intensity_map[valid_h[unique_idx], valid_w[unique_idx]] = valid_intensities[unique_idx]
-        
-        # 将-1替换为0
-        range_map[range_map == -1] = 0
-        intensity_map[intensity_map == -1] = 0
-        
-        # 存储LiDAR数据
-        lidar_data[frame] = {
-            'range_image': range_map,
-            'intensity_image': intensity_map,
-            'raw_points': points,
-            'lidar2ego': lidar2ego,
-            'ego2world': ego2world[frame]
-        }
-        
-        # 创建虚拟相机参数
-        # 计算世界坐标下的LiDAR位置
+    train_cam_infos = []
+    test_cam_infos = []
+    
+    # 为每一帧创建相机
+    for frame in valid_frames:
+        # 获取该帧的ego2world变换矩阵
         ego2world_matrix = ego2world[frame]
-        lidar2world = ego2world_matrix @ lidar2ego
+        lidar2world_matrix = ego2world_matrix @ lidar2ego
         
-        # 提取旋转和平移
-        R = lidar2world[:3, :3].T  # PGSR expects transposed rotation
-        T = lidar2world[:3, 3]
+        # 从lidar2world矩阵提取LiDAR传感器的世界坐标系位置和朝向
+        lidar_world_pos = lidar2world_matrix[:3, 3]  # LiDAR在世界坐标系中的位置
+        lidar_world_rot = lidar2world_matrix[:3, :3]  # LiDAR在世界坐标系中的旋转
         
-        # 虚拟相机内参（基于Range Image的分辨率）
-        fx = W / (2 * np.pi)  # 水平方向的焦距
-        fy = H / (inc_top - inc_bottom)  # 垂直方向的焦距
+        print(f"[DEBUG] Frame {frame}: LiDAR world position = {lidar_world_pos}")
+        print(f"[DEBUG] Frame {frame}: LiDAR world rotation =\n{lidar_world_rot}")
         
-        FovX = 2 * np.pi  # 水平视场角360度
-        FovY = inc_top - inc_bottom  # 垂直视场角
-        
-        # 创建CameraInfo
-        cam_info = CameraInfo(
-            uid=idx,
-            global_id=frame,
-            R=R,
-            T=T,
-            FovY=FovY,
-            FovX=FovX,
-            image_path=f"frame_{frame:06d}",  # 虚拟路径
-            image_name=f"frame_{frame:06d}",
-            width=W,
-            height=H,
-            fx=fx,
-            fy=fy
-        )
-        cam_infos.append(cam_info)
+        if cam_split_mode == "triple":
+            # 创建三个120度相机，分别覆盖不同的水平角度范围
+            for cam_idx in range(3):
+                # 计算该相机的水平角度偏移（0度、120度、240度）
+                horizontal_offset = cam_idx * 120.0  # 度
+                horizontal_offset_rad = np.radians(horizontal_offset)
+                
+                # 创建围绕Z轴的旋转矩阵（水平旋转）
+                cos_h = np.cos(horizontal_offset_rad)
+                sin_h = np.sin(horizontal_offset_rad)
+                horizontal_rotation = np.array([
+                    [cos_h, -sin_h, 0],
+                    [sin_h,  cos_h, 0],
+                    [0,      0,     1]
+                ])
+                
+                # 应用水平旋转到LiDAR坐标系
+                rotated_lidar_rot = lidar_world_rot @ horizontal_rotation
+                
+                # 坐标系变换：LiDAR(X前Y左Z上) -> 相机(X右Y上Z后)
+                lidar_to_camera_transform = np.array([
+                    [0, -1,  0],  # LiDAR的Y(左) -> 相机的-X(左)
+                    [0,  0,  1],  # LiDAR的Z(上) -> 相机的Y(上)  
+                    [-1, 0,  0]   # LiDAR的X(前) -> 相机的-Z(前)
+                ])
+                
+                # 计算最终的相机到世界的旋转矩阵
+                camera_to_world_rotation = rotated_lidar_rot @ lidar_to_camera_transform.T
+                
+                # PGSR需要的参数
+                R = camera_to_world_rotation  # camera-to-world旋转矩阵
+                
+                # 计算world-to-camera的translation
+                # 对于旋转偏移的相机，位置保持在同一个LiDAR中心
+                world_to_camera_translation = -camera_to_world_rotation.T @ lidar_world_pos
+                T = world_to_camera_translation
+                
+                print(f"[DEBUG] Frame {frame} Cam {cam_idx}: Camera R (camera-to-world) =\n{R}")
+                print(f"[DEBUG] Frame {frame} Cam {cam_idx}: Camera T (world-to-camera translation) = {T}")
+                
+                # 验证相机中心是否正确
+                expected_camera_center = lidar_world_pos  # 所有分割相机共享同一中心
+                print(f"[DEBUG] Frame {frame} Cam {cam_idx}: Expected camera center = {expected_camera_center}")
+                print(f"[DEBUG] Frame {frame} Cam {cam_idx}: Should match LiDAR world position = {lidar_world_pos}")
+                
+                # 计算相机中心误差用于验证
+                # 从world-to-view变换矩阵中提取相机中心
+                world_view_transform = getWorld2View2(R, T)
+                C2W = np.linalg.inv(world_view_transform)
+                camera_center_from_transform = C2W[:3, 3]
+                camera_center_error = np.linalg.norm(camera_center_from_transform - expected_camera_center)
+                print(f"[DEBUG] Frame {frame} Cam {cam_idx}: Camera center error = {camera_center_error:.6f}")
+                
+                # 120度水平FOV，保持原有的垂直FOV
+                FoVx = np.radians(120.0)  # 120度水平视场角
+                FoVy = np.radians(26.9)   # 保持原有垂直视场角
+                
+                # 相机图像尺寸：水平分辨率为原来的1/3，垂直保持不变
+                image_width = 1030 // 3  # 约343像素
+                image_height = 66
+                
+                # 创建相机信息
+                cam_info = CameraInfo(
+                    uid=len(train_cam_infos),
+                    R=R,
+                    T=T,
+                    FoVx=FoVx,
+                    FoVy=FoVy,
+                    image=None,  # LiDAR模式下不需要图像
+                    image_path=None,
+                    image_name=f"frame_{frame:06d}_cam_{cam_idx}",
+                    width=image_width,
+                    height=image_height,
+                    lidar_path=lidar_files[frame] if frame < len(lidar_files) else None,
+                    # 添加水平角度范围信息，用于LiDAR点过滤
+                    horizontal_fov_start=horizontal_offset,
+                    horizontal_fov_end=(horizontal_offset + 120.0) % 360.0
+                )
+                
+                train_cam_infos.append(cam_info)
+        else:
+            # 原来的单相机模式（保持360度）
+            # 坐标系变换：LiDAR(X前Y左Z上) -> 相机(X右Y上Z后)
+            lidar_to_camera_transform = np.array([
+                [0, -1,  0],  # LiDAR的Y(左) -> 相机的-X(左)
+                [0,  0,  1],  # LiDAR的Z(上) -> 相机的Y(上)  
+                [-1, 0,  0]   # LiDAR的X(前) -> 相机的-Z(前)
+            ])
+            
+            # 计算最终的相机到世界的旋转矩阵
+            camera_to_world_rotation = lidar_world_rot @ lidar_to_camera_transform.T
+            
+            # PGSR需要的参数
+            R = camera_to_world_rotation  # camera-to-world旋转矩阵
+            
+            # 计算world-to-camera的translation
+            world_to_camera_translation = -camera_to_world_rotation.T @ lidar_world_pos
+            T = world_to_camera_translation
+            
+            print(f"[DEBUG] Frame {frame}: Camera R (camera-to-world) =\n{R}")
+            print(f"[DEBUG] Frame {frame}: Camera T (world-to-camera translation) = {T}")
+            
+            # 验证相机中心是否正确
+            expected_camera_center = lidar_world_pos
+            print(f"[DEBUG] Frame {frame}: Expected camera center = {expected_camera_center}")
+            print(f"[DEBUG] Frame {frame}: Should match LiDAR world position = {lidar_world_pos}")
+            
+            # 计算相机中心误差用于验证
+            # 从world-to-view变换矩阵中提取相机中心
+            world_view_transform = getWorld2View2(R, T)
+            C2W = np.linalg.inv(world_view_transform)
+            camera_center_from_transform = C2W[:3, 3]
+            camera_center_error = np.linalg.norm(camera_center_from_transform - expected_camera_center)
+            print(f"[DEBUG] Frame {frame}: Camera center error = {camera_center_error:.6f}")
+            
+            # 360度全景相机
+            FoVx = 2 * np.pi  # 360度水平视场角
+            FoVy = np.radians(26.9)   # 保持原有垂直视场角
+            
+            # 创建相机信息
+            cam_info = CameraInfo(
+                uid=len(train_cam_infos),
+                R=R,
+                T=T,
+                FoVx=FoVx,
+                FoVy=FoVy,
+                image=None,  # LiDAR模式下不需要图像
+                image_path=None,
+                image_name=f"frame_{frame:06d}",
+                width=1030,
+                height=66,
+                lidar_path=lidar_files[frame] if frame < len(lidar_files) else None,
+                horizontal_fov_start=0.0,
+                horizontal_fov_end=360.0
+            )
+            
+            train_cam_infos.append(cam_info)
     
     # 划分训练和测试集
     if eval:
         # 简单的8:2划分
-        split_idx = int(len(cam_infos) * 0.8)
-        train_cam_infos = cam_infos[:split_idx]
-        test_cam_infos = cam_infos[split_idx:]
+        split_idx = int(len(train_cam_infos) * 0.8)
+        train_cam_infos = train_cam_infos[:split_idx]
+        test_cam_infos = train_cam_infos[split_idx:]
     else:
-        train_cam_infos = cam_infos
+        train_cam_infos = train_cam_infos
         test_cam_infos = []
     
     print(f"Training cameras: {len(train_cam_infos)}, Test cameras: {len(test_cam_infos)}")
@@ -536,7 +422,5 @@ def readKitti360SceneInfo(path, images=None, eval=False, args=None):
     return scene_info
 
 sceneLoadTypeCallbacks = {
-    "Colmap": readColmapSceneInfo,
-    "Blender": readNerfSyntheticInfo,
-    "Kitti360": readKitti360SceneInfo
+    "Kitti360": readKITTI360Info
 }

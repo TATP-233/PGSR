@@ -1,13 +1,9 @@
 # KITTI-360 序列00 静态场景配置
-parent_config: "../kitti360_base.yaml"
-
-# 场景特定参数
-scene_id: "seq00"
-dynamic: false
+parent_config: "../kitti_base.yaml"
 
 # 帧范围设置（根据实际数据调整）
-frame_length: [0, 100]              # 训练帧范围
-eval_frames: [20, 40, 60, 80]       # 评估帧
+frame_length: [1538, 1601] # 训练帧范围
+eval_frames: [1551, 1564, 1577, 1590] # 评估帧
 
 # 实验设置
 exp_name: "seq00_static_test"

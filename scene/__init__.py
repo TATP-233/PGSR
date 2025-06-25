@@ -43,12 +43,7 @@ class Scene:
         self.train_cameras = {}
         self.test_cameras = {}
 
-        if os.path.exists(os.path.join(args.source_path, "sparse")):
-            scene_info = sceneLoadTypeCallbacks["Colmap"](args.source_path, args.images, args.eval)
-        elif os.path.exists(os.path.join(args.source_path, "transforms_train.json")):
-            print("Found transforms_train.json file, assuming Blender data set!")
-            scene_info = sceneLoadTypeCallbacks["Blender"](args.source_path, args.white_background, args.eval)
-        elif os.path.exists(os.path.join(args.source_path, "data_3d_raw")):
+        if os.path.exists(os.path.join(args.source_path, "data_3d_raw")):
             print("Found data_3d_raw folder, assuming KITTI-360 dataset!")
             scene_info = sceneLoadTypeCallbacks["Kitti360"](args.source_path, args.images, args.eval, args)
         else:

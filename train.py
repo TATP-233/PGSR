@@ -1,500 +1,502 @@
-#
-# Copyright (C) 2023, Inria
-# GRAPHDECO research group, https://team.inria.fr/graphdeco
-# All rights reserved.
-#
-# This software is free for non-commercial, research and evaluation use 
-# under the terms of the LICENSE.md file.
-#
-# For inquiries contact  george.drettakis@inria.fr
-#
+#!/usr/bin/env python3
+"""
+LiDAR-PGSR 统一训练脚本
+支持配置文件模式和传统命令行参数模式
+基于PGSR的平面化高斯，使用LiDAR数据进行监督训练
+"""
 
 import os
-from datetime import datetime
 import torch
 import random
-import numpy as np
+import sys
+import uuid
+import argparse
 from random import randint
-from utils.loss_utils import l1_loss, ssim, lncc, get_img_grad_weight
-from utils.graphics_utils import patch_offsets, patch_warp
-from gaussian_renderer import render, network_gui
-import sys, time
+from utils.loss_utils import l1_loss, ssim
+from gaussian_renderer.lidar_renderer import render_lidar
 from scene import Scene, GaussianModel
 from utils.general_utils import safe_state
-import cv2
-import uuid
+from utils.config_utils import load_config, save_config, override_config
 from tqdm import tqdm
-from utils.image_utils import psnr, erode
+from utils.image_utils import psnr
+from utils.lidar_loss_utils import compute_lidar_loss
+from utils.pgsr_loss_utils import compute_pgsr_geometric_loss
 from argparse import ArgumentParser, Namespace
 from arguments import ModelParams, PipelineParams, OptimizationParams
-from scene.app_model import AppModel
-from scene.cameras import Camera
+import time
+from torch.utils.tensorboard import SummaryWriter
+
 try:
     from torch.utils.tensorboard import SummaryWriter
     TENSORBOARD_FOUND = True
 except ImportError:
     TENSORBOARD_FOUND = False
-import time
-import torch.nn.functional as F
 
-def setup_seed(seed):
-     torch.manual_seed(seed)
-     torch.cuda.manual_seed_all(seed)
-     np.random.seed(seed)
-     random.seed(seed)
-     torch.backends.cudnn.deterministic = True
-setup_seed(22)
 
-def gen_virtul_cam(cam, trans_noise=1.0, deg_noise=15.0):
-    Rt = np.zeros((4, 4))
-    Rt[:3, :3] = cam.R.transpose()
-    Rt[:3, 3] = cam.T
-    Rt[3, 3] = 1.0
-    C2W = np.linalg.inv(Rt)
-
-    translation_perturbation = np.random.uniform(-trans_noise, trans_noise, 3)
-    rotation_perturbation = np.random.uniform(-deg_noise, deg_noise, 3)
-    rx, ry, rz = np.deg2rad(rotation_perturbation)
-    Rx = np.array([[1, 0, 0],
-                    [0, np.cos(rx), -np.sin(rx)],
-                    [0, np.sin(rx), np.cos(rx)]])
+def training_config_mode(config):
+    """基于配置文件的训练模式"""
+    print("Optimizing:", config.exp_name)
+    print("Scene:", getattr(config, 'scene_id', 'unknown'))  
+    print("Iterations:", config.opt.iterations)
     
-    Ry = np.array([[np.cos(ry), 0, np.sin(ry)],
-                    [0, 1, 0],
-                    [-np.sin(ry), 0, np.cos(ry)]])
+    # 初始化高斯模型
+    gaussians = GaussianModel(config.model.sh_degree)
     
-    Rz = np.array([[np.cos(rz), -np.sin(rz), 0],
-                    [np.sin(rz), np.cos(rz), 0],
-                    [0, 0, 1]])
-    R_perturbation = Rz @ Ry @ Rx
+    # 准备输出目录和日志
+    dataset, opt, pipe, testing_iterations, saving_iterations, checkpoint_iterations, checkpoint, debug_from = prepare_output_and_logger_config(config)
+    
+    # 读取数据集
+    scene = Scene(dataset, gaussians, config, shuffle=False)
+    
+    # 获取相机数量，在三相机模式下每帧有3个相机
+    train_cameras = scene.getTrainCameras()
+    total_cameras = len(train_cameras)
+    frames_count = total_cameras // 3 if hasattr(config, 'cam_split_mode') and config.cam_split_mode == "triple" else total_cameras
+    print(f"Training with {total_cameras} cameras ({frames_count} frames)")
+    
+    # 创建Tensorboard日志
+    if not config.disable_tensorboard:
+        writer = SummaryWriter(log_dir=f"runs/{config.model_path.split('/')[-1]}")
+        print(f"Tensorboard logging to: runs/{config.model_path.split('/')[-1]}")
+    else:
+        writer = None
 
-    C2W[:3, :3] = C2W[:3, :3] @ R_perturbation
-    C2W[:3, 3] = C2W[:3, 3] + translation_perturbation
-    Rt = np.linalg.inv(C2W)
-    virtul_cam = Camera(100000, Rt[:3, :3].transpose(), Rt[:3, 3], cam.FoVx, cam.FoVy,
-                        cam.image_width, cam.image_height,
-                        cam.image_path, cam.image_name, 100000,
-                        trans=np.array([0.0, 0.0, 0.0]), scale=1.0, 
-                        preload_img=False, data_device = "cuda")
-    return virtul_cam
-
-def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoint_iterations, checkpoint, debug_from):
+    # 如果从检查点恢复
     first_iter = 0
-    tb_writer = prepare_output_and_logger(dataset)
-    # backup main code
-    cmd = f'cp ./train.py {dataset.model_path}/'
-    os.system(cmd)
-    cmd = f'cp -rf ./arguments {dataset.model_path}/'
-    os.system(cmd)
-    cmd = f'cp -rf ./gaussian_renderer {dataset.model_path}/'
-    os.system(cmd)
-    cmd = f'cp -rf ./scene {dataset.model_path}/'
-    os.system(cmd)
-    cmd = f'cp -rf ./utils {dataset.model_path}/'
-    os.system(cmd)
-
-    gaussians = GaussianModel(dataset.sh_degree)
-    scene = Scene(dataset, gaussians)
-    gaussians.training_setup(opt)
-
-    app_model = AppModel()
-    app_model.train()
-    app_model.cuda()
-    
     if checkpoint:
         (model_params, first_iter) = torch.load(checkpoint)
-        gaussians.restore(model_params, opt)
-        app_model.load_weights(scene.model_path)
+        gaussians.restore(model_params, config)
 
+    # 设置背景颜色
     bg_color = [1, 1, 1] if dataset.white_background else [0, 0, 0]
     background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
 
-    iter_start = torch.cuda.Event(enable_timing = True)
-    iter_end = torch.cuda.Event(enable_timing = True)
-
+    # 设置迭代器
+    iter_start = torch.cuda.Event(enable_timing=True)
+    iter_end = torch.cuda.Event(enable_timing=True)
     viewpoint_stack = None
     ema_loss_for_log = 0.0
-    ema_single_view_for_log = 0.0
-    ema_multi_view_geo_for_log = 0.0
-    ema_multi_view_pho_for_log = 0.0
-    normal_loss, geo_loss, ncc_loss = None, None, None
-    progress_bar = tqdm(range(first_iter, opt.iterations), desc="Training progress")
+    
+    # 为多相机模式准备相机循环
+    progress_bar = tqdm(range(first_iter, config.opt.iterations), desc="Training progress")
     first_iter += 1
-    debug_path = os.path.join(scene.model_path, "debug")
-    os.makedirs(debug_path, exist_ok=True)
-
-    for iteration in range(first_iter, opt.iterations + 1):
-        # if network_gui.conn == None:
-        #     network_gui.try_connect()
-        # while network_gui.conn != None:
-        #     try:
-        #         net_image_bytes = None
-        #         custom_cam, do_training, pipe.convert_SHs_python, pipe.compute_cov3D_python, keep_alive, scaling_modifer = network_gui.receive()
-        #         if custom_cam != None:
-        #             net_image = render(custom_cam, gaussians, pipe, background, scaling_modifer)["render"]
-        #             net_image_bytes = memoryview((torch.clamp(net_image, min=0, max=1.0) * 255).byte().permute(1, 2, 0).contiguous().cpu().numpy())
-        #         network_gui.send(net_image_bytes, dataset.source_path)
-        #         if do_training and ((iteration < int(opt.iterations)) or not keep_alive):
-        #             break
-        #     except Exception as e:
-        #         network_gui.conn = None
-
+    
+    for iteration in range(first_iter, config.opt.iterations + 1):
         iter_start.record()
+        
         gaussians.update_learning_rate(iteration)
-        # Every 1000 its we increase the levels of SH up to a maximum degree
+
+        # 每1000次迭代增加SH的度
         if iteration % 1000 == 0:
             gaussians.oneupSHdegree()
 
-        # Pick a random Camera
+        # 选择训练相机
         if not viewpoint_stack:
-            viewpoint_stack = scene.getTrainCameras().copy()
-        viewpoint_cam = viewpoint_stack.pop(randint(0, len(viewpoint_stack)-1))
+            viewpoint_stack = train_cameras.copy()
+        viewpoint_camera = viewpoint_stack.pop(randint(0, len(viewpoint_stack)-1))
 
-        gt_image, gt_image_gray = viewpoint_cam.get_image()
-        if iteration > 1000 and opt.exposure_compensation:
-            gaussians.use_app = True
-
-        # Render
-        if (iteration - 1) == debug_from:
-            pipe.debug = True
-
-        bg = torch.rand((3), device="cuda") if opt.random_background else background
-        render_pkg = render(viewpoint_cam, gaussians, pipe, bg, app_model=app_model,
-                            return_plane=iteration>opt.single_view_weight_from_iter, return_depth_normal=iteration>opt.single_view_weight_from_iter)
-        image, viewspace_point_tensor, visibility_filter, radii = \
-            render_pkg["render"], render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["radii"]
-        
-        # Loss
-        ssim_loss = (1.0 - ssim(image, gt_image))
-        if 'app_image' in render_pkg and ssim_loss < 0.5:
-            app_image = render_pkg['app_image']
-            Ll1 = l1_loss(app_image, gt_image)
+        # 对多相机模式的特殊处理
+        if hasattr(viewpoint_camera, 'horizontal_fov_start') and hasattr(viewpoint_camera, 'horizontal_fov_end'):
+            fov_info = f"[FOV: {viewpoint_camera.horizontal_fov_start:.0f}°-{viewpoint_camera.horizontal_fov_end:.0f}°]"
         else:
-            Ll1 = l1_loss(image, gt_image)
-        image_loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * ssim_loss
-        loss = image_loss.clone()
+            fov_info = "[Full 360°]"
+            
+        if iteration % 100 == 1:
+            print(f"Iteration {iteration}: Training with camera {viewpoint_camera.image_name} {fov_info}")
+
+        # 渲染
+        render_pkg = render_lidar(viewpoint_camera, gaussians, pipe, background)
+        rendered_depth, rendered_intensity, rendered_raydrop, viewspace_point_tensor = render_pkg["depth"], render_pkg["intensity"], render_pkg["raydrop"], render_pkg["viewspace_points"]
         
-        # scale loss
-        if visibility_filter.sum() > 0:
-            scale = gaussians.get_scaling[visibility_filter]
-            sorted_scale, _ = torch.sort(scale, dim=-1)
-            min_scale_loss = sorted_scale[...,0]
-            loss += opt.scale_loss_weight * min_scale_loss.mean()
-        # single-view loss
-        if iteration > opt.single_view_weight_from_iter:
-            weight = opt.single_view_weight
-            normal = render_pkg["rendered_normal"]
-            depth_normal = render_pkg["depth_normal"]
+        # 获取渲染中的其他变量
+        visibility_filter = render_pkg["visibility_filter"]
+        radii = render_pkg["radii"]
+        viewspace_point_tensor_abs = render_pkg["viewspace_points_abs"]
+        update_filter = visibility_filter
 
-            image_weight = (1.0 - get_img_grad_weight(gt_image))
-            image_weight = (image_weight).clamp(0,1).detach() ** 2
-            if not opt.wo_image_weight:
-                # image_weight = erode(image_weight[None,None]).squeeze()
-                normal_loss = weight * (image_weight * (((depth_normal - normal)).abs().sum(0))).mean()
-            else:
-                normal_loss = weight * (((depth_normal - normal)).abs().sum(0)).mean()
-            loss += (normal_loss)
+        # LiDAR损失计算
+        # 构建渲染包
+        render_pkg_loss = {
+            "depth": rendered_depth,
+            "intensity": rendered_intensity,
+            "raydrop": rendered_raydrop,
+            "visibility_filter": visibility_filter,
+            "radii": radii,
+            "viewspace_points": viewspace_point_tensor
+        }
+        
+        # 获取真实LiDAR数据
+        gt_data = {
+            "range_image": viewpoint_camera.range_image,
+            "intensity_image": viewpoint_camera.intensity_image
+        }
+        
+        # 设置损失权重
+        loss_weights = {
+            'depth': getattr(config.opt, 'lambda_depth', 1.0),
+            'intensity': getattr(config.opt, 'lambda_intensity', 0.5),
+            'raydrop': getattr(config.opt, 'lambda_raydrop', 0.1),
+            'smoothness': 0.01,
+            'normal': 0.1,
+            'planar': 0.05
+        }
+        
+        loss_dict, total_lidar_loss = compute_lidar_loss(render_pkg_loss, gt_data, loss_weights)
+        
+        # PGSR几何约束损失
+        # === 使用LiDAR intensity图像进行几何正则化 ===
+        # 原理：LiDAR intensity包含真实边缘信息，适合PGSR单视图几何约束的边缘感知计算
+        # intensity_image格式：KITTI-360数据集中为2D张量(H, W)，PGSR已支持单通道图像处理
+        gt_image = viewpoint_camera.intensity_image  # 保持原始(H, W)格式
+        
+        pgsr_loss_dict, pgsr_total_loss = compute_pgsr_geometric_loss(
+            render_pkg, gt_image, viewpoint_camera,
+            getattr(config.opt, 'lambda_sv_geom', 0.015), 0.0, 0.0  # 在LiDAR模式下关闭多视图损失
+        )
+        
+        # 合并损失
+        total_loss = total_lidar_loss + pgsr_total_loss
+        loss_dict.update(pgsr_loss_dict)
 
-        # multi-view loss
-        if iteration > opt.multi_view_weight_from_iter:
-            nearest_cam = None if len(viewpoint_cam.nearest_id) == 0 else scene.getTrainCameras()[random.sample(viewpoint_cam.nearest_id,1)[0]]
-            use_virtul_cam = False
-            if opt.use_virtul_cam and (np.random.random() < opt.virtul_cam_prob or nearest_cam is None):
-                nearest_cam = gen_virtul_cam(viewpoint_cam, trans_noise=dataset.multi_view_max_dis, deg_noise=dataset.multi_view_max_angle)
-                use_virtul_cam = True
-            if nearest_cam is not None:
-                patch_size = opt.multi_view_patch_size
-                sample_num = opt.multi_view_sample_num
-                pixel_noise_th = opt.multi_view_pixel_noise_th
-                total_patch_size = (patch_size * 2 + 1) ** 2
-                ncc_weight = opt.multi_view_ncc_weight
-                geo_weight = opt.multi_view_geo_weight
-                ## compute geometry consistency mask and loss
-                H, W = render_pkg['plane_depth'].squeeze().shape
-                ix, iy = torch.meshgrid(
-                    torch.arange(W), torch.arange(H), indexing='xy')
-                pixels = torch.stack([ix, iy], dim=-1).float().to(render_pkg['plane_depth'].device)
+        # 调试：检查backward前的梯度状态
+        if iteration <= 3:
+            print(f"[DEBUG Iter {iteration}] Before backward:")
+            print(f"  viewspace_point_tensor.grad: {viewspace_point_tensor.grad.shape if viewspace_point_tensor.grad is not None else 'None'}")
+            print(f"  viewspace_point_tensor_abs.grad: {viewspace_point_tensor_abs.grad.shape if viewspace_point_tensor_abs.grad is not None else 'None'}")
 
-                nearest_render_pkg = render(nearest_cam, gaussians, pipe, bg, app_model=app_model,
-                                            return_plane=True, return_depth_normal=False)
+        total_loss.backward()
 
-                pts = gaussians.get_points_from_depth(viewpoint_cam, render_pkg['plane_depth'])
-                pts_in_nearest_cam = pts @ nearest_cam.world_view_transform[:3,:3] + nearest_cam.world_view_transform[3,:3]
-                map_z, d_mask = gaussians.get_points_depth_in_depth_map(nearest_cam, nearest_render_pkg['plane_depth'], pts_in_nearest_cam)
-                
-                pts_in_nearest_cam = pts_in_nearest_cam / (pts_in_nearest_cam[:,2:3])
-                pts_in_nearest_cam = pts_in_nearest_cam * map_z.squeeze()[...,None]
-                R = torch.tensor(nearest_cam.R).float().cuda()
-                T = torch.tensor(nearest_cam.T).float().cuda()
-                pts_ = (pts_in_nearest_cam-T)@R.transpose(-1,-2)
-                pts_in_view_cam = pts_ @ viewpoint_cam.world_view_transform[:3,:3] + viewpoint_cam.world_view_transform[3,:3]
-                pts_projections = torch.stack(
-                            [pts_in_view_cam[:,0] * viewpoint_cam.Fx / pts_in_view_cam[:,2] + viewpoint_cam.Cx,
-                            pts_in_view_cam[:,1] * viewpoint_cam.Fy / pts_in_view_cam[:,2] + viewpoint_cam.Cy], -1).float()
-                pixel_noise = torch.norm(pts_projections - pixels.reshape(*pts_projections.shape), dim=-1)
-                if not opt.wo_use_geo_occ_aware:
-                    d_mask = d_mask & (pixel_noise < pixel_noise_th)
-                    weights = (1.0 / torch.exp(pixel_noise)).detach()
-                    weights[~d_mask] = 0
-                else:
-                    d_mask = d_mask
-                    weights = torch.ones_like(pixel_noise)
-                    weights[~d_mask] = 0
-                if iteration % 200 == 0:
-                    gt_img_show = ((gt_image).permute(1,2,0).clamp(0,1)[:,:,[2,1,0]]*255).detach().cpu().numpy().astype(np.uint8)
-                    if 'app_image' in render_pkg:
-                        img_show = ((render_pkg['app_image']).permute(1,2,0).clamp(0,1)[:,:,[2,1,0]]*255).detach().cpu().numpy().astype(np.uint8)
-                    else:
-                        img_show = ((image).permute(1,2,0).clamp(0,1)[:,:,[2,1,0]]*255).detach().cpu().numpy().astype(np.uint8)
-                    normal_show = (((normal+1.0)*0.5).permute(1,2,0).clamp(0,1)*255).detach().cpu().numpy().astype(np.uint8)
-                    depth_normal_show = (((depth_normal+1.0)*0.5).permute(1,2,0).clamp(0,1)*255).detach().cpu().numpy().astype(np.uint8)
-                    d_mask_show = (weights.float()*255).detach().cpu().numpy().astype(np.uint8).reshape(H,W)
-                    d_mask_show_color = cv2.applyColorMap(d_mask_show, cv2.COLORMAP_JET)
-                    depth = render_pkg['plane_depth'].squeeze().detach().cpu().numpy()
-                    depth_i = (depth - depth.min()) / (depth.max() - depth.min() + 1e-20)
-                    depth_i = (depth_i * 255).clip(0, 255).astype(np.uint8)
-                    depth_color = cv2.applyColorMap(depth_i, cv2.COLORMAP_JET)
-                    distance = render_pkg['rendered_distance'].squeeze().detach().cpu().numpy()
-                    distance_i = (distance - distance.min()) / (distance.max() - distance.min() + 1e-20)
-                    distance_i = (distance_i * 255).clip(0, 255).astype(np.uint8)
-                    distance_color = cv2.applyColorMap(distance_i, cv2.COLORMAP_JET)
-                    image_weight = image_weight.detach().cpu().numpy()
-                    image_weight = (image_weight * 255).clip(0, 255).astype(np.uint8)
-                    image_weight_color = cv2.applyColorMap(image_weight, cv2.COLORMAP_JET)
-                    row0 = np.concatenate([gt_img_show, img_show, normal_show, distance_color], axis=1)
-                    row1 = np.concatenate([d_mask_show_color, depth_color, depth_normal_show, image_weight_color], axis=1)
-                    image_to_show = np.concatenate([row0, row1], axis=0)
-                    cv2.imwrite(os.path.join(debug_path, "%05d"%iteration + "_" + viewpoint_cam.image_name + ".jpg"), image_to_show)
+        # 调试：检查backward后的梯度状态
+        if iteration <= 3:
+            print(f"[DEBUG Iter {iteration}] After backward:")
+            print(f"  viewspace_point_tensor.grad: {viewspace_point_tensor.grad.shape if viewspace_point_tensor.grad is not None else 'None'}")
+            print(f"  viewspace_point_tensor_abs.grad: {viewspace_point_tensor_abs.grad.shape if viewspace_point_tensor_abs.grad is not None else 'None'}")
 
-                if d_mask.sum() > 0:
-                    geo_loss = geo_weight * ((weights * pixel_noise)[d_mask]).mean()
-                    loss += geo_loss
-                    if use_virtul_cam is False:
-                        with torch.no_grad():
-                            ## sample mask
-                            d_mask = d_mask.reshape(-1)
-                            valid_indices = torch.arange(d_mask.shape[0], device=d_mask.device)[d_mask]
-                            if d_mask.sum() > sample_num:
-                                index = np.random.choice(d_mask.sum().cpu().numpy(), sample_num, replace = False)
-                                valid_indices = valid_indices[index]
-
-                            weights = weights.reshape(-1)[valid_indices]
-                            ## sample ref frame patch
-                            pixels = pixels.reshape(-1,2)[valid_indices]
-                            offsets = patch_offsets(patch_size, pixels.device)
-                            ori_pixels_patch = pixels.reshape(-1, 1, 2) / viewpoint_cam.ncc_scale + offsets.float()
-                            
-                            H, W = gt_image_gray.squeeze().shape
-                            pixels_patch = ori_pixels_patch.clone()
-                            pixels_patch[:, :, 0] = 2 * pixels_patch[:, :, 0] / (W - 1) - 1.0
-                            pixels_patch[:, :, 1] = 2 * pixels_patch[:, :, 1] / (H - 1) - 1.0
-                            ref_gray_val = F.grid_sample(gt_image_gray.unsqueeze(1), pixels_patch.view(1, -1, 1, 2), align_corners=True)
-                            ref_gray_val = ref_gray_val.reshape(-1, total_patch_size)
-
-                            ref_to_neareast_r = nearest_cam.world_view_transform[:3,:3].transpose(-1,-2) @ viewpoint_cam.world_view_transform[:3,:3]
-                            ref_to_neareast_t = -ref_to_neareast_r @ viewpoint_cam.world_view_transform[3,:3] + nearest_cam.world_view_transform[3,:3]
-
-                        ## compute Homography
-                        ref_local_n = render_pkg["rendered_normal"].permute(1,2,0)
-                        ref_local_n = ref_local_n.reshape(-1,3)[valid_indices]
-
-                        ref_local_d = render_pkg['rendered_distance'].squeeze()
-                        # rays_d = viewpoint_cam.get_rays()
-                        # rendered_normal2 = render_pkg["rendered_normal"].permute(1,2,0).reshape(-1,3)
-                        # ref_local_d = render_pkg['plane_depth'].view(-1) * ((rendered_normal2 * rays_d.reshape(-1,3)).sum(-1).abs())
-                        # ref_local_d = ref_local_d.reshape(*render_pkg['plane_depth'].shape)
-
-                        ref_local_d = ref_local_d.reshape(-1)[valid_indices]
-                        H_ref_to_neareast = ref_to_neareast_r[None] - \
-                            torch.matmul(ref_to_neareast_t[None,:,None].expand(ref_local_d.shape[0],3,1), 
-                                        ref_local_n[:,:,None].expand(ref_local_d.shape[0],3,1).permute(0, 2, 1))/ref_local_d[...,None,None]
-                        H_ref_to_neareast = torch.matmul(nearest_cam.get_k(nearest_cam.ncc_scale)[None].expand(ref_local_d.shape[0], 3, 3), H_ref_to_neareast)
-                        H_ref_to_neareast = H_ref_to_neareast @ viewpoint_cam.get_inv_k(viewpoint_cam.ncc_scale)
-                        
-                        ## compute neareast frame patch
-                        grid = patch_warp(H_ref_to_neareast.reshape(-1,3,3), ori_pixels_patch)
-                        grid[:, :, 0] = 2 * grid[:, :, 0] / (W - 1) - 1.0
-                        grid[:, :, 1] = 2 * grid[:, :, 1] / (H - 1) - 1.0
-                        _, nearest_image_gray = nearest_cam.get_image()
-                        sampled_gray_val = F.grid_sample(nearest_image_gray[None], grid.reshape(1, -1, 1, 2), align_corners=True)
-                        sampled_gray_val = sampled_gray_val.reshape(-1, total_patch_size)
-                        
-                        ## compute loss
-                        ncc, ncc_mask = lncc(ref_gray_val, sampled_gray_val)
-                        mask = ncc_mask.reshape(-1)
-                        ncc = ncc.reshape(-1) * weights
-                        ncc = ncc[mask].squeeze()
-
-                        if mask.sum() > 0:
-                            ncc_loss = ncc_weight * ncc.mean()
-                            loss += ncc_loss
-
-        loss.backward()
         iter_end.record()
 
         with torch.no_grad():
-            # Progress bar
-            ema_loss_for_log = 0.4 * image_loss.item() + 0.6 * ema_loss_for_log
-            ema_single_view_for_log = 0.4 * normal_loss.item() if normal_loss is not None else 0.0 + 0.6 * ema_single_view_for_log
-            ema_multi_view_geo_for_log = 0.4 * geo_loss.item() if geo_loss is not None else 0.0 + 0.6 * ema_multi_view_geo_for_log
-            ema_multi_view_pho_for_log = 0.4 * ncc_loss.item() if ncc_loss is not None else 0.0 + 0.6 * ema_multi_view_pho_for_log
+            # 进度报告
+            ema_loss_for_log = 0.4 * total_loss.item() + 0.6 * ema_loss_for_log
             if iteration % 10 == 0:
-                loss_dict = {
-                    "Loss": f"{ema_loss_for_log:.{5}f}",
-                    "Single": f"{ema_single_view_for_log:.{5}f}",
-                    "Geo": f"{ema_multi_view_geo_for_log:.{5}f}",
-                    "Pho": f"{ema_multi_view_pho_for_log:.{5}f}",
-                    "Points": f"{len(gaussians.get_xyz)}"
-                }
-                progress_bar.set_postfix(loss_dict)
+                progress_bar.set_postfix({"Loss": f"{ema_loss_for_log:.{7}f}"})
                 progress_bar.update(10)
-            if iteration == opt.iterations:
+            if iteration == config.opt.iterations:
                 progress_bar.close()
 
-            # Log and save
-            training_report(tb_writer, iteration, Ll1, loss, l1_loss, iter_start.elapsed_time(iter_end), testing_iterations, scene, render, (pipe, background), app_model)
+            # 记录
+            training_report_config(writer, iteration, loss_dict, total_loss, iter_start.elapsed_time(iter_end), config, scene, render_lidar, pipe, background)
             if (iteration in saving_iterations):
                 print("\n[ITER {}] Saving Gaussians".format(iteration))
                 scene.save(iteration)
-                    
-            # Densification
-            if iteration < opt.densify_until_iter:
-                # Keep track of max radii in image-space for pruning
-                mask = (render_pkg["out_observe"] > 0) & visibility_filter
-                gaussians.max_radii2D[mask] = torch.max(gaussians.max_radii2D[mask], radii[mask])
-                viewspace_point_tensor_abs = render_pkg["viewspace_points_abs"]
-                gaussians.add_densification_stats(viewspace_point_tensor, viewspace_point_tensor_abs, visibility_filter)
 
+            # 密度自适应
+            if iteration <= opt.densify_until_iter:
+                # 调试可见点信息
+                if iteration <= 10:
+                    total_points = len(visibility_filter)
+                    visible_points = visibility_filter.sum().item()
+                    radii_stats = radii[radii > 0]
+                    print(f"[DEBUG Iter {iteration}] Visibility: {visible_points}/{total_points} points visible")
+                    if len(radii_stats) > 0:
+                        print(f"[DEBUG Iter {iteration}] Radii stats: min={radii_stats.min():.3f}, max={radii_stats.max():.3f}, mean={radii_stats.float().mean():.3f}")
+                    else:
+                        print(f"[DEBUG Iter {iteration}] All radii are 0")
+                
+                # 可见点存在时进行密集化统计
+                if visibility_filter.sum() > 0:
+                    gaussians.add_densification_stats(viewspace_point_tensor, viewspace_point_tensor_abs, visibility_filter)
+                elif iteration <= 5:
+                    print(f"[DEBUG Iter {iteration}] Skipping densification stats due to no visible points")
+
+                # 重新启用密集化
                 if iteration > opt.densify_from_iter and iteration % opt.densification_interval == 0:
                     size_threshold = 20 if iteration > opt.opacity_reset_interval else None
-                    gaussians.densify_and_prune(opt.densify_grad_threshold, opt.densify_abs_grad_threshold, 
-                                                opt.opacity_cull_threshold, scene.cameras_extent, size_threshold)
-            
-            # multi-view observe trim
-            if opt.use_multi_view_trim and iteration % 1000 == 0 and iteration < opt.densify_until_iter:
-                observe_the = 2
-                observe_cnt = torch.zeros_like(gaussians.get_opacity)
-                for view in scene.getTrainCameras():
-                    render_pkg_tmp = render(view, gaussians, pipe, bg, app_model=app_model, return_plane=False, return_depth_normal=False)
-                    out_observe = render_pkg_tmp["out_observe"]
-                    observe_cnt[out_observe > 0] += 1
-                prune_mask = (observe_cnt < observe_the).squeeze()
-                if prune_mask.sum() > 0:
-                    gaussians.prune_points(prune_mask)
-
-            # reset_opacity
-            if iteration < opt.densify_until_iter:
+                    gaussians.densify_and_prune(opt.densify_grad_threshold, 0.01, opt.min_opacity, scene.cameras_extent, size_threshold)
+                
                 if iteration % opt.opacity_reset_interval == 0 or (dataset.white_background and iteration == opt.densify_from_iter):
                     gaussians.reset_opacity()
 
-            # Optimizer step
-            if iteration < opt.iterations:
+            # 优化器步骤
+            if iteration < config.opt.iterations:
                 gaussians.optimizer.step()
-                app_model.optimizer.step()
                 gaussians.optimizer.zero_grad(set_to_none = True)
-                app_model.optimizer.zero_grad(set_to_none = True)
 
             if (iteration in checkpoint_iterations):
                 print("\n[ITER {}] Saving Checkpoint".format(iteration))
                 torch.save((gaussians.capture(), iteration), scene.model_path + "/chkpnt" + str(iteration) + ".pth")
-                app_model.save_weights(scene.model_path, iteration)
-    
-    app_model.save_weights(scene.model_path, opt.iterations)
-    torch.cuda.empty_cache()
 
-def prepare_output_and_logger(args):    
-    if not args.model_path:
+def prepare_output_and_logger_config(config):
+    """配置模式的输出目录和日志记录器准备"""
+    if not hasattr(config, 'model_path') or not config.model_path:
         if os.getenv('OAR_JOB_ID'):
-            unique_str=os.getenv('OAR_JOB_ID')
+            unique_str = os.getenv('OAR_JOB_ID')
         else:
             unique_str = str(uuid.uuid4())
-        args.model_path = os.path.join("./output/", unique_str[0:10])
-
         
-    # Set up output folder
-    print("Output folder: {}".format(args.model_path))
-    os.makedirs(args.model_path, exist_ok = True)
-    with open(os.path.join(args.model_path, "cfg_args"), 'w') as cfg_log_f:
-        cfg_log_f.write(str(Namespace(**vars(args))))
+        config.model_path = os.path.join(
+            config.model_dir, 
+            config.task_name, 
+            config.exp_name, 
+            unique_str[0:10]
+        )
+        
+    # 创建输出文件夹
+    print(f"Output folder: {config.model_path}")
+    os.makedirs(config.model_path, exist_ok=True)
+    
+    # 保存配置文件
+    config_save_path = os.path.join(config.model_path, "config.yaml")
+    save_config(config, config_save_path)
+    print(f"Config saved to: {config_save_path}")
 
-    # Create Tensorboard writer
+    # 创建Tensorboard记录器
     tb_writer = None
     if TENSORBOARD_FOUND:
-        tb_writer = SummaryWriter(args.model_path)
+        tb_writer = SummaryWriter(config.model_path)
     else:
         print("Tensorboard not available: not logging progress")
-    return tb_writer
+    
+    # 从配置中提取参数到Namespace对象
+    dataset = Namespace()
+    dataset.source_path = getattr(config, 'source_dir', getattr(config.data, 'source_path', ''))
+    dataset.model_path = config.model_path 
+    dataset.images = getattr(config.data, 'images', 'images')
+    dataset.resolution = getattr(config.data, 'resolution', -1)
+    dataset.white_background = getattr(config.data, 'white_background', config.model.white_background)
+    dataset.data_device = getattr(config.data, 'data_device', "cuda")
+    dataset.eval = getattr(config.data, 'eval', False)
+    dataset.sh_degree = getattr(config.model, 'sh_degree', 3)
+    dataset.preload_img = getattr(config.model, 'preload_img', True)
+    dataset.ncc_scale = getattr(config.model, 'ncc_scale', 1.0)
+    
+    dataset.multi_view_num = getattr(config.model, 'multi_view_num', 8)
+    dataset.multi_view_max_angle = getattr(config.model, 'multi_view_max_angle', 30)
+    dataset.multi_view_min_dis = getattr(config.model, 'multi_view_min_dis', 0.01)
+    dataset.multi_view_max_dis = getattr(config.model, 'multi_view_max_dis', 1.5)
+    
+    dataset.frame_length = getattr(config, 'frame_length', [0, 100])
+    dataset.seq = getattr(config, 'seq', "0000")
+    dataset.data_type = getattr(config, 'data_type', "range_image")
+    
+    opt = Namespace()
+    opt.iterations = config.opt.iterations
+    opt.position_lr_init = getattr(config.opt, 'position_lr_init', 0.00016)
+    opt.position_lr_final = getattr(config.opt, 'position_lr_final', 0.0000016)
+    opt.position_lr_delay_mult = getattr(config.opt, 'position_lr_delay_mult', 0.01)
+    opt.position_lr_max_steps = getattr(config.opt, 'position_lr_max_steps', 30000)
+    opt.feature_lr = getattr(config.opt, 'feature_lr', 0.0025)
+    opt.opacity_lr = getattr(config.opt, 'opacity_lr', 0.05)
+    opt.scaling_lr = getattr(config.opt, 'scaling_lr', 0.005)
+    opt.rotation_lr = getattr(config.opt, 'rotation_lr', 0.001)
+    opt.percent_dense = getattr(config.opt, 'percent_dense', 0.01)
+    opt.lambda_dssim = getattr(config.opt, 'lambda_dssim', 0.2)
+    opt.densification_interval = getattr(config.opt, 'densification_interval', 100)
+    opt.opacity_reset_interval = getattr(config.opt, 'opacity_reset_interval', 3000)
+    opt.densify_from_iter = getattr(config.opt, 'densify_from_iter', 500)
+    opt.densify_until_iter = getattr(config.opt, 'densify_until_iter', 15000)
+    opt.densify_grad_threshold = getattr(config.opt, 'densify_grad_threshold', 0.0002)
+    opt.min_opacity = getattr(config.opt, 'min_opacity', 0.005)
+    opt.random_background = getattr(config.opt, 'random_background', False)
+    opt.abs_split_radii2D_threshold = getattr(config.opt, 'abs_split_radii2D_threshold', 20)
+    opt.max_abs_split_points = getattr(config.opt, 'max_abs_split_points', 50000)
+    opt.max_all_points = getattr(config.opt, 'max_all_points', 6000000)
+    
+    pipe = Namespace()
+    pipe.convert_SHs_python = getattr(config.pipe, 'convert_SHs_python', False)
+    pipe.compute_cov3D_python = getattr(config.pipe, 'compute_cov3D_python', False)
+    pipe.debug = getattr(config.pipe, 'debug', False)
+    
+    testing_iterations = getattr(config, 'testing_iterations', [7_000, 30_000])
+    saving_iterations = getattr(config, 'saving_iterations', [7_000, 30_000])
+    checkpoint_iterations = getattr(config, 'checkpoint_iterations', [])
+    checkpoint = getattr(config, 'start_checkpoint', None)
+    debug_from = getattr(config.pipe, 'debug_from', -1)
+    
+    return dataset, opt, pipe, testing_iterations, saving_iterations, checkpoint_iterations, checkpoint, debug_from
 
-def training_report(tb_writer, iteration, Ll1, loss, l1_loss, elapsed, testing_iterations, scene : Scene, renderFunc, renderArgs, app_model):
+
+def training_report_config(tb_writer, iteration, loss_dict, total_loss, elapsed, config, scene, renderFunc, pipe, bg):
+    """配置模式的训练报告和日志记录"""
     if tb_writer:
-        tb_writer.add_scalar('train_loss_patches/l1_loss', Ll1.item(), iteration)
-        tb_writer.add_scalar('train_loss_patches/total_loss', loss.item(), iteration)
-        tb_writer.add_scalar('iter_time', elapsed, iteration)
+        # === 1. 损失记录 ===
+        tb_writer.add_scalar('train_loss_patches/total_loss', total_loss.item(), iteration)
+        for key, value in loss_dict.items():
+            if torch.is_tensor(value):
+                tb_writer.add_scalar(f'train_loss_patches/{key}', value.item(), iteration)
+            else:
+                tb_writer.add_scalar(f'train_loss_patches/{key}', value, iteration)
+        
+        # === 2. 高斯基元统计 ===
+        gaussians = scene.gaussians
+        tb_writer.add_scalar('gaussian_stats/num_points', gaussians.get_xyz.shape[0], iteration)
+        
+        if gaussians.get_xyz.shape[0] > 0:
+            # 位置统计
+            xyz = gaussians.get_xyz
+            tb_writer.add_scalar('gaussian_stats/xyz_std', torch.std(xyz).item(), iteration)
+            tb_writer.add_scalar('gaussian_stats/xyz_mean_x', torch.mean(xyz[:, 0]).item(), iteration)
+            tb_writer.add_scalar('gaussian_stats/xyz_mean_y', torch.mean(xyz[:, 1]).item(), iteration)
+            tb_writer.add_scalar('gaussian_stats/xyz_mean_z', torch.mean(xyz[:, 2]).item(), iteration)
+            
+            # 缩放统计  
+            scaling = gaussians.get_scaling
+            tb_writer.add_scalar('gaussian_stats/scaling_mean', torch.mean(scaling).item(), iteration)
+            tb_writer.add_scalar('gaussian_stats/scaling_std', torch.std(scaling).item(), iteration)
+            tb_writer.add_scalar('gaussian_stats/scaling_max', torch.max(scaling).item(), iteration)
+            tb_writer.add_scalar('gaussian_stats/scaling_min', torch.min(scaling).item(), iteration)
+            
+            # 不透明度统计
+            opacity = gaussians.get_opacity
+            tb_writer.add_scalar('gaussian_stats/opacity_mean', torch.mean(opacity).item(), iteration)
+            tb_writer.add_scalar('gaussian_stats/opacity_std', torch.std(opacity).item(), iteration)
+            
+            # PGSR平面化程度
+            min_scales = scaling.min(dim=1)[0]
+            tb_writer.add_scalar('gaussian_stats/planarity_mean', torch.mean(min_scales).item(), iteration)
+            tb_writer.add_scalar('gaussian_stats/planarity_std', torch.std(min_scales).item(), iteration)
+        
+        # === 3. 学习率记录 ===
+        for param_group in gaussians.optimizer.param_groups:
+            tb_writer.add_scalar(f'learning_rates/{param_group["name"]}', param_group['lr'], iteration)
+        
+        # === 4. 性能指标 ===
+        tb_writer.add_scalar('performance/iteration_time_ms', elapsed, iteration)
+        if torch.cuda.is_available():
+            tb_writer.add_scalar('performance/gpu_memory_gb', torch.cuda.max_memory_allocated() / 1e9, iteration)
+        
+        # === 5. 每1000次迭代进行测试和可视化 ===
+        if iteration % 1000 == 0 and len(scene.getTrainCameras()) > 0:
+            torch.cuda.empty_cache()
+            validation_configs = ({'name': 'test', 'cameras': scene.getTestCameras()}, 
+                                {'name': 'train', 'cameras': [scene.getTrainCameras()[idx % len(scene.getTrainCameras())] for idx in range(5, 30, 5)]})
 
-    # Report test and samples of training set
-    if iteration in testing_iterations:
-        torch.cuda.empty_cache()
-        validation_configs = ({'name': 'test', 'cameras' : scene.getTestCameras()}, 
-                              {'name': 'train', 'cameras' : [scene.getTrainCameras()[idx % len(scene.getTrainCameras())] for idx in range(5, 30, 5)]})
+            for config_test in validation_configs:
+                if config_test['cameras'] and len(config_test['cameras']) > 0:
+                    render_results = []
+                    for idx, viewpoint in enumerate(config_test['cameras']):
+                        if idx >= 3:  # 限制测试样本数量
+                            break
+                        
+                        try:
+                            render_result = renderFunc(viewpoint, scene.gaussians, pipe, bg)
+                            
+                            # LiDAR评价指标
+                            if hasattr(viewpoint, 'range_image') and render_result.get("depth") is not None:
+                                gt_depth = viewpoint.range_image
+                                pred_depth = render_result["depth"].squeeze()
+                                
+                                # 深度RMSE
+                                valid_mask = (gt_depth > 0) & (pred_depth > 0)
+                                if valid_mask.sum() > 0:
+                                    depth_rmse = torch.sqrt(torch.mean((gt_depth[valid_mask] - pred_depth[valid_mask]) ** 2))
+                                    tb_writer.add_scalar(f'{config_test["name"]}_metrics/depth_rmse', depth_rmse.item(), iteration)
+                                    
+                                    # 深度相对误差
+                                    relative_error = torch.mean(torch.abs(gt_depth[valid_mask] - pred_depth[valid_mask]) / gt_depth[valid_mask])
+                                    tb_writer.add_scalar(f'{config_test["name"]}_metrics/depth_relative_error', relative_error.item(), iteration)
+                            
+                            # Intensity评价指标
+                            if hasattr(viewpoint, 'intensity_image') and render_result.get("intensity") is not None:
+                                gt_intensity = viewpoint.intensity_image
+                                pred_intensity = render_result["intensity"].squeeze()
+                                
+                                # Intensity PSNR
+                                intensity_mse = torch.mean((gt_intensity - pred_intensity) ** 2)
+                                if intensity_mse > 0:
+                                    intensity_psnr = 20 * torch.log10(1.0 / torch.sqrt(intensity_mse))
+                                    tb_writer.add_scalar(f'{config_test["name"]}_metrics/intensity_psnr', intensity_psnr.item(), iteration)
+                                
+                                # Intensity SSIM
+                                if hasattr(ssim, '__call__'):
+                                    gt_3ch = gt_intensity.unsqueeze(0).expand(3, -1, -1).unsqueeze(0)
+                                    pred_3ch = pred_intensity.unsqueeze(0).expand(3, -1, -1).unsqueeze(0)
+                                    intensity_ssim = ssim(gt_3ch, pred_3ch)
+                                    tb_writer.add_scalar(f'{config_test["name"]}_metrics/intensity_ssim', intensity_ssim.item(), iteration)
+                            
+                            render_results.append(render_result)
+                            
+                        except Exception as e:
+                            print(f"Error during {config_test['name']} evaluation at iteration {iteration}: {e}")
+                            continue
+                    
+                    # 记录图像（每3000次迭代）
+                    if iteration % 3000 == 0 and render_results:
+                        try:
+                            # 深度图可视化
+                            if render_results[0].get("depth") is not None:
+                                depth_img = render_results[0]["depth"].squeeze()
+                                depth_img_normalized = (depth_img - depth_img.min()) / (depth_img.max() - depth_img.min() + 1e-8)
+                                tb_writer.add_image(f'{config_test["name"]}_images/depth', depth_img_normalized.unsqueeze(0), iteration)
+                            
+                            # Intensity图可视化
+                            if render_results[0].get("intensity") is not None:
+                                intensity_img = render_results[0]["intensity"].squeeze()
+                                intensity_img_normalized = (intensity_img - intensity_img.min()) / (intensity_img.max() - intensity_img.min() + 1e-8)
+                                tb_writer.add_image(f'{config_test["name"]}_images/intensity', intensity_img_normalized.unsqueeze(0), iteration)
+                                
+                        except Exception as e:
+                            print(f"Error saving images to tensorboard: {e}")
+            
+            torch.cuda.empty_cache()
 
-        for config in validation_configs:
-            if config['cameras'] and len(config['cameras']) > 0:
-                l1_test = 0.0
-                psnr_test = 0.0
-                for idx, viewpoint in enumerate(config['cameras']):
-                    out = renderFunc(viewpoint, scene.gaussians, *renderArgs, app_model=app_model)
-                    image = out["render"]
-                    if 'app_image' in out:
-                        image = out['app_image']
-                    image = torch.clamp(image, 0.0, 1.0)
-                    gt_image, _ = viewpoint.get_image()
-                    gt_image = torch.clamp(gt_image.to("cuda"), 0.0, 1.0)
-                    if tb_writer and (idx < 5):
-                        tb_writer.add_images(config['name'] + "_view_{}/render".format(viewpoint.image_name), image[None], global_step=iteration)
-                        if iteration == testing_iterations[0]:
-                            tb_writer.add_images(config['name'] + "_view_{}/ground_truth".format(viewpoint.image_name), gt_image[None], global_step=iteration)
-                    l1_test += l1_loss(image, gt_image).mean().double()
-                    psnr_test += psnr(image, gt_image).mean().double()
-                psnr_test /= len(config['cameras'])
-                l1_test /= len(config['cameras'])
-                print("\n[ITER {}] Evaluating {}: L1 {} PSNR {}".format(iteration, config['name'], l1_test, psnr_test))
-                if tb_writer:
-                    tb_writer.add_scalar(config['name'] + '/loss_viewpoint - l1_loss', l1_test, iteration)
-                    tb_writer.add_scalar(config['name'] + '/loss_viewpoint - psnr', psnr_test, iteration)
-
-        if tb_writer:
-            tb_writer.add_histogram("scene/opacity_histogram", scene.gaussians.get_opacity, iteration)
-            tb_writer.add_scalar('total_points', scene.gaussians.get_xyz.shape[0], iteration)
-        torch.cuda.empty_cache()
-
-if __name__ == "__main__":
-    torch.set_num_threads(8)
-    # Set up command line argument parser
-    parser = ArgumentParser(description="Training script parameters")
+def main():
+    """主函数 - 支持配置文件和传统命令行两种模式"""
+    parser = argparse.ArgumentParser(description="LiDAR-PGSR Training")
+    
+    # 添加配置文件选项
+    parser.add_argument("-c", "--config", type=str, required=True,
+                       help="Path to the configuration file (config mode)")
+    
+    # 传统命令行参数
     lp = ModelParams(parser)
     op = OptimizationParams(parser)
     pp = PipelineParams(parser)
-    parser.add_argument('--ip', type=str, default="127.0.0.1")
-    parser.add_argument('--port', type=int, default=6007)
-    parser.add_argument('--debug_from', type=int, default=-100)
+    parser.add_argument('--debug_from', type=int, default=-1)
     parser.add_argument('--detect_anomaly', action='store_true', default=False)
     parser.add_argument("--test_iterations", nargs="+", type=int, default=[7_000, 30_000])
     parser.add_argument("--save_iterations", nargs="+", type=int, default=[7_000, 30_000])
     parser.add_argument("--quiet", action="store_true")
     parser.add_argument("--checkpoint_iterations", nargs="+", type=int, default=[])
-    parser.add_argument("--start_checkpoint", type=str, default = None)
-    args = parser.parse_args(sys.argv[1:])
-    args.save_iterations.append(args.iterations)
+    parser.add_argument("--start_checkpoint", type=str, default=None)
     
-    print("Optimizing " + args.model_path)
+    parser.add_argument("--exp_name", type=str, default=None, help="Override experiment name")
+    parser.add_argument("--scene_id", type=str, default=None, help="Override scene ID")
+    
+    args = parser.parse_args()
+    
+    # 配置文件模式
+    print(f"Running in CONFIG mode with config: {args.config}")
+    config = load_config(args.config)
+    
+    # 命令行参数覆盖
+    overrides = {}
+    if args.start_checkpoint:
+        overrides['start_checkpoint'] = args.start_checkpoint
+    if args.scene_id:
+        overrides['scene_id'] = args.scene_id
+    if args.exp_name:
+        overrides['exp_name'] = args.exp_name
+    if args.debug_from >= 0:
+        overrides['pipe.debug_from'] = args.debug_from
+    if args.detect_anomaly:
+        overrides['detect_anomaly'] = True
+    
+    if overrides:
+        config = override_config(config, overrides)
+    
+    print(f"Optimizing: {config.exp_name}")
+    print(f"Scene: {getattr(config, 'scene_id', 'default')}")
+    print(f"Iterations: {config.opt.iterations}")
 
-    # Initialize system state (RNG)
+    # 初始化系统状态
     safe_state(args.quiet)
 
-    # Start GUI server, configure and run training
-    # network_gui.init(args.ip, args.port)
-    torch.autograd.set_detect_anomaly(args.detect_anomaly)
-    training(lp.extract(args), op.extract(args), pp.extract(args), args.test_iterations, args.save_iterations, args.checkpoint_iterations, args.start_checkpoint, args.debug_from)
-
-    # All done
+    # 启动配置模式训练
+    torch.autograd.set_detect_anomaly(getattr(config, 'detect_anomaly', False))
+    training_config_mode(config)
+    
     print("\nTraining complete.")
+
+
+if __name__ == "__main__":
+    main()

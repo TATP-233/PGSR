@@ -208,8 +208,41 @@ class GaussianModel:
         print("Number of points at initialisation : ", fused_point_cloud.shape[0])
 
         dist = torch.sqrt(torch.clamp_min(distCUDA2(torch.from_numpy(np.asarray(pcd.points)).float().cuda()), 0.0000001))
-        # print(f"new scale {torch.quantile(dist, 0.1)}")
-        scales = torch.log(dist)[...,None].repeat(1, 3)
+        
+        # 计算点到原点的距离（作为深度的代理）
+        point_depths = torch.norm(fused_point_cloud, dim=1)
+        
+        # 为KITTI-360数据集设置更合适的最小尺度
+        # 原问题：torch.log(dist)如果dist很小会产生很大的负值，导致exp(scales)极小
+        # 新方案：基于深度自适应设置尺度，确保远距离点有足够大的投影尺度
+        min_dist = 0.1  # 最小距离设为0.1米
+        dist = torch.clamp(dist, min=min_dist)
+        
+        # 自适应尺度：对于距离很远的点，增加基础尺度
+        # 目标：在远距离处保证投影半径至少1-2像素
+        # 假设焦距约500像素，目标投影半径2像素
+        # scale * focal / depth >= 2
+        # scale >= 2 * depth / focal
+        target_radius_pixels = 2.0
+        focal_approx = 500.0  # 近似焦距
+        
+        # 计算所需的最小尺度
+        required_scale = target_radius_pixels * point_depths / focal_approx
+        
+        # 使用距离和深度的较大值作为基础尺度
+        adaptive_scale = torch.maximum(dist, required_scale * 0.3)  # 使用30%的所需尺度作为基础
+        
+        print(f"点云距离统计: min={dist.min():.4f}, max={dist.max():.4f}, mean={dist.mean():.4f}")
+        print(f"点云深度统计: min={point_depths.min():.4f}, max={point_depths.max():.4f}, mean={point_depths.mean():.4f}")
+        print(f"所需尺度统计: min={required_scale.min():.4f}, max={required_scale.max():.4f}, mean={required_scale.mean():.4f}")
+        print(f"自适应尺度统计: min={adaptive_scale.min():.4f}, max={adaptive_scale.max():.4f}, mean={adaptive_scale.mean():.4f}")
+        
+        # 为LiDAR增加额外的尺度缩放因子，解决可见点太少的问题
+        lidar_scale_multiplier = 5.0  # 增大5倍尺度
+        scales = torch.log(adaptive_scale * lidar_scale_multiplier)[...,None].repeat(1, 3)
+        print(f"初始尺度统计: min={scales.min():.4f}, max={scales.max():.4f}, mean={scales.mean():.4f}")
+        print(f"exp(scales)统计: min={torch.exp(scales).min():.6f}, max={torch.exp(scales).max():.6f}")
+        
         rots = torch.zeros((fused_point_cloud.shape[0], 4), device="cuda")
         rots[:, 0] = 1
 
@@ -248,6 +281,29 @@ class GaussianModel:
         self.abs_split_radii2D_threshold = training_args.abs_split_radii2D_threshold
         self.max_abs_split_points = training_args.max_abs_split_points
         self.max_all_points = training_args.max_all_points
+        
+        # 确保所有参数都在CUDA设备上
+        if not self._xyz.is_cuda:
+            print(f"[WARNING] Moving _xyz from {self._xyz.device} to cuda")
+            self._xyz = self._xyz.cuda()
+        if not self._knn_f.is_cuda:
+            print(f"[WARNING] Moving _knn_f from {self._knn_f.device} to cuda")
+            self._knn_f = self._knn_f.cuda()
+        if not self._scaling.is_cuda:
+            print(f"[WARNING] Moving _scaling from {self._scaling.device} to cuda")
+            self._scaling = self._scaling.cuda()
+        if not self._rotation.is_cuda:
+            print(f"[WARNING] Moving _rotation from {self._rotation.device} to cuda")
+            self._rotation = self._rotation.cuda()
+        if not self._opacity.is_cuda:
+            print(f"[WARNING] Moving _opacity from {self._opacity.device} to cuda")
+            self._opacity = self._opacity.cuda()
+        if not self._intensity_sh.is_cuda:
+            print(f"[WARNING] Moving _intensity_sh from {self._intensity_sh.device} to cuda")
+            self._intensity_sh = self._intensity_sh.cuda()
+        if not self._raydrop_sh.is_cuda:
+            print(f"[WARNING] Moving _raydrop_sh from {self._raydrop_sh.device} to cuda")
+            self._raydrop_sh = self._raydrop_sh.cuda()
         l = [
             {'params': [self._xyz], 'lr': training_args.position_lr_init * self.spatial_lr_scale, "name": "xyz"},
             {'params': [self._knn_f], 'lr': 0.01, "name": "knn_f"},
@@ -391,11 +447,17 @@ class GaussianModel:
         for group in self.optimizer.param_groups:
             assert len(group["params"]) == 1
             extension_tensor = tensors_dict[group["name"]]
+            
+            # 确保extension_tensor在正确的设备上
+            existing_param = group["params"][0]
+            if extension_tensor.device != existing_param.device:
+                extension_tensor = extension_tensor.to(existing_param.device)
+            
             stored_state = self.optimizer.state.get(group['params'][0], None)
             if stored_state is not None:
 
-                stored_state["exp_avg"] = torch.cat((stored_state["exp_avg"], torch.zeros_like(extension_tensor)), dim=0)
-                stored_state["exp_avg_sq"] = torch.cat((stored_state["exp_avg_sq"], torch.zeros_like(extension_tensor)), dim=0)
+                stored_state["exp_avg"] = torch.cat((stored_state["exp_avg"], torch.zeros_like(extension_tensor).to(stored_state["exp_avg"].device)), dim=0)
+                stored_state["exp_avg_sq"] = torch.cat((stored_state["exp_avg_sq"], torch.zeros_like(extension_tensor).to(stored_state["exp_avg_sq"].device)), dim=0)
 
                 del self.optimizer.state[group['params'][0]]
                 group["params"][0] = nn.Parameter(torch.cat((group["params"][0], extension_tensor), dim=0).requires_grad_(True))
@@ -409,13 +471,15 @@ class GaussianModel:
         return optimizable_tensors
 
     def densification_postfix(self, new_xyz, new_knn_f, new_scaling, new_rotation, new_opacity, new_intensity_sh, new_raydrop_sh):
-        d = {"xyz": new_xyz,
-        "knn_f": new_knn_f,
-        "scaling" : new_scaling,
-        "rotation" : new_rotation,
-        "opacity": new_opacity,
-        "intensity_sh": new_intensity_sh,
-        "raydrop_sh": new_raydrop_sh}
+        # 确保所有张量都在正确的设备上
+        device = self.get_xyz.device
+        d = {"xyz": new_xyz.to(device),
+        "knn_f": new_knn_f.to(device),
+        "scaling" : new_scaling.to(device),
+        "rotation" : new_rotation.to(device),
+        "opacity": new_opacity.to(device),
+        "intensity_sh": new_intensity_sh.to(device),
+        "raydrop_sh": new_raydrop_sh.to(device)}
         optimizable_tensors = self.cat_tensors_to_optimizer(d)
         self._xyz = optimizable_tensors["xyz"]
         self._knn_f = optimizable_tensors["knn_f"]
@@ -466,7 +530,7 @@ class GaussianModel:
             # print(f"split {selected_pts_mask.sum()}, abs {selected_pts_mask_abs.sum()}, raddi2D {padded_max_radii2D.max()} ,{padded_max_radii2D.median()}")
 
         stds = self.get_scaling[selected_pts_mask].repeat(N,1)
-        means =torch.zeros((stds.size(0), 3),device="cuda")
+        means =torch.zeros((stds.size(0), 3), device=self.get_xyz.device)
         samples = torch.normal(mean=means, std=stds)
         rots = build_rotation(self._rotation[selected_pts_mask]).repeat(N,1,1)
         new_xyz = torch.bmm(rots, samples.unsqueeze(-1)).squeeze(-1) + self.get_xyz[selected_pts_mask].repeat(N, 1)
@@ -477,10 +541,24 @@ class GaussianModel:
         new_intensity_sh = self._intensity_sh[selected_pts_mask].repeat(N,1)
         new_raydrop_sh = self._raydrop_sh[selected_pts_mask].repeat(N,1)
 
-        self.densification_postfix(new_xyz, new_knn_f, new_scaling, new_rotation, new_opacity, new_intensity_sh, new_raydrop_sh)
+        # 如果有要分裂的点，才进行densification
+        if len(new_xyz) > 0:
+            self.densification_postfix(new_xyz, new_knn_f, new_scaling, new_rotation, new_opacity, new_intensity_sh, new_raydrop_sh)
 
-        prune_filter = torch.cat((selected_pts_mask, torch.zeros(N * selected_pts_mask.sum(), device="cuda", dtype=bool)))
-        self.prune_points(prune_filter)
+            # 修复：densification_postfix之后，模型包含原始点+新增点
+            # prune_filter应该标记要删除的原始点（选中的分裂点）
+            # 而新增的点保留（不删除）
+            current_n_points = self.get_xyz.shape[0]
+            expected_new_points = len(new_xyz)
+            
+            if current_n_points == n_init_points + expected_new_points:
+                # 创建prune filter：删除被分裂的原始点，保留新增点
+                prune_filter = torch.cat((selected_pts_mask, torch.zeros(expected_new_points, device=selected_pts_mask.device, dtype=bool)))
+                self.prune_points(prune_filter)
+            else:
+                print(f"[DEBUG] Unexpected point count after densification: {current_n_points}, expected {n_init_points + expected_new_points}")
+        else:
+            print(f"[DEBUG] No points selected for splitting")
 
     def densify_and_clone(self, grads, grad_threshold, scene_extent):
         n_init_points = self.get_xyz.shape[0]
@@ -501,7 +579,7 @@ class GaussianModel:
             new_xyz = self._xyz[selected_pts_mask]
 
             stds = self.get_scaling[selected_pts_mask]
-            means =torch.zeros((stds.size(0), 3),device="cuda")
+            means =torch.zeros((stds.size(0), 3), device=self.get_xyz.device)
             samples = torch.normal(mean=means, std=stds)
             rots = build_rotation(self._rotation[selected_pts_mask])
             new_xyz = torch.bmm(rots, samples.unsqueeze(-1)).squeeze(-1) + self.get_xyz[selected_pts_mask]
@@ -516,14 +594,28 @@ class GaussianModel:
             self.densification_postfix(new_xyz, new_knn_f, new_scaling, new_rotation, new_opacity, new_intensity_sh, new_raydrop_sh)
 
     def densify_and_prune(self, max_grad, abs_max_grad, min_opacity, extent, max_screen_size):
+        # 检查梯度累积器是否已初始化
+        if len(self.xyz_gradient_accum) == 0 or len(self.denom) == 0:
+            print(f"[DEBUG] Skipping densify_and_prune: gradient accumulators not initialized")
+            return
+            
         grads = self.xyz_gradient_accum / self.denom
         grads_abs = self.xyz_gradient_accum_abs / self.denom_abs
         grads[grads.isnan()] = 0.0
         grads_abs[grads_abs.isnan()] = 0.0
         max_radii2D = self.max_radii2D.clone()
 
+        # 重要：在densify_and_clone和densify_and_split之间，点的数量可能会变化
+        # 因此需要分别计算初始点数
         self.densify_and_clone(grads, max_grad, extent)
-        self.densify_and_split(grads, max_grad, grads_abs, abs_max_grad, extent, max_radii2D)
+        
+        # 重新获取当前点的数量用于densify_and_split
+        # 因为densify_and_clone可能已经改变了点的数量
+        if len(self.xyz_gradient_accum) != self.get_xyz.shape[0]:
+            # 如果梯度累积器的大小与当前点数不匹配，重新计算梯度
+            print(f"[DEBUG] Point count changed after clone, skipping split")
+        else:
+            self.densify_and_split(grads, max_grad, grads_abs, abs_max_grad, extent, max_radii2D)
 
         prune_mask = (self.get_opacity < min_opacity).squeeze()
 
@@ -536,6 +628,28 @@ class GaussianModel:
         torch.cuda.empty_cache()
 
     def add_densification_stats(self, viewspace_point_tensor, viewspace_point_tensor_abs, update_filter):
+        # 如果梯度累积器为空，重新初始化（第一次有可见点时）
+        if len(self.xyz_gradient_accum) == 0 and update_filter.sum() > 0:
+            num_points = self.get_xyz.shape[0]
+            print(f"[DEBUG] Reinitializing gradient accumulators for {num_points} points")
+            self.xyz_gradient_accum = torch.zeros((num_points, 1), device="cuda")
+            self.xyz_gradient_accum_abs = torch.zeros((num_points, 1), device="cuda")
+            self.denom = torch.zeros((num_points, 1), device="cuda")
+            self.denom_abs = torch.zeros((num_points, 1), device="cuda")
+        
+        # 检查形状是否匹配
+        if len(self.xyz_gradient_accum) == 0 or len(self.xyz_gradient_accum_abs) == 0:
+            print(f"[DEBUG] Skipping densification stats due to empty gradient accumulators")
+            return
+        
+        if viewspace_point_tensor.grad is None or viewspace_point_tensor_abs.grad is None:
+            print(f"[DEBUG] Skipping densification stats due to None gradients")
+            return
+        
+        if update_filter.sum() == 0:
+            print(f"[DEBUG] Skipping densification stats due to no visible points")
+            return
+        
         self.xyz_gradient_accum[update_filter] += torch.norm(viewspace_point_tensor.grad[update_filter,:2], dim=-1, keepdim=True)
         self.xyz_gradient_accum_abs[update_filter] += torch.norm(viewspace_point_tensor_abs.grad[update_filter,:2], dim=-1, keepdim=True)
         self.denom[update_filter] += 1

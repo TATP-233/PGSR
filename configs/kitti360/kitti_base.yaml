@@ -2,8 +2,8 @@
 parent_config: "../base.yaml"
 
 # 数据集特定参数
-data_type: "KITTI360"
-source_dir: "data/kitti360/seq00"
+data_type: "KITTI"
+source_dir: "data/kitti360"
 
 # KITTI-360特有的数据参数
 data:
@@ -19,7 +19,6 @@ data:
   intensity_range: [0.0, 1.0]       # 强度值范围
   
   # 点云预处理
-  point_cloud_range: [-100, -100, -5, 100, 100, 5]  # [x_min, y_min, z_min, x_max, y_max, z_max]
   use_ground_removal: false          # 是否移除地面点
   use_intensity_normalization: true  # 是否标准化强度值
 

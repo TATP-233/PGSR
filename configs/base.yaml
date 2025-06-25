@@ -7,7 +7,16 @@ detect_anomaly: true
 # 模型参数
 model:
   sh_degree: 3
+  source_path: ""
+  model_path: ""
+  images: "images"
+  resolution: -1
   white_background: false
+  data_device: "cuda"
+  eval: false
+  frame_length: [1538, 1601]
+  seq: "0000"
+  cam_split_mode: "triple"  # "single" for 360° camera, "triple" for three 120° cameras
   enable_lidar: true  # 启用LiDAR模式
   # PGSR特有参数
   planar_constraint: true
@@ -33,6 +42,12 @@ opt:
   rotation_lr: 0.001
   opacity_lr: 0.05
   feature_lr: 0.0025
+  percent_dense: 0.01
+  lambda_dssim: 0.2
+  lambda_depth: 1.0
+  lambda_intensity: 0.5
+  lambda_raydrop: 0.1
+  lambda_chamfer: 0.1
   
   # 球谐函数设置
   sh_increase_interval: 1000
@@ -83,6 +98,8 @@ opt:
   abs_split_radii2D_threshold: 3.0
   max_abs_split_points: 2000000
   max_all_points: 6000000
+  
+  random_background: false
 
 # 数据加载参数
 data:

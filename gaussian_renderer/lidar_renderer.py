@@ -27,12 +27,11 @@ def render_normal(viewpoint_cam, depth, offset=None, normal=None, scale=1):
     normal_ref = normal_ref.permute(2,0,1)
     return normal_ref
 
-def render_lidar(viewpoint_camera, pc: GaussianModel, pipe, bg_color: torch.Tensor, scaling_modifier=1.0, 
-                return_plane=True, return_depth_normal=True):
+def render_lidar(viewpoint_camera, pc: GaussianModel, pipe, bg_color: torch.Tensor, scaling_modifier=1.0, override_color=None):
     """
     LiDAR渲染函数，返回深度、intensity和raydrop
     
-    使用单次渲染调用，将LiDAR属性作为多通道颜色渲染
+    使用PGSR的平面化高斯渲染，始终返回真实深度图
     
     Args:
         viewpoint_camera: 虚拟相机视点
@@ -40,8 +39,7 @@ def render_lidar(viewpoint_camera, pc: GaussianModel, pipe, bg_color: torch.Tens
         pipe: 渲染管线配置
         bg_color: 背景颜色
         scaling_modifier: 缩放修改器
-        return_plane: 是否返回平面信息
-        return_depth_normal: 是否返回深度法向量
+        override_color: 覆盖颜色
     
     Returns:
         dict: 包含 'depth', 'intensity', 'raydrop', 'rendered_normal', 'depth_normal' 等渲染结果
@@ -59,10 +57,13 @@ def render_lidar(viewpoint_camera, pc: GaussianModel, pipe, bg_color: torch.Tens
     # 设置光栅化配置
     # 对于LiDAR的360度视场角，需要特殊处理
     if abs(viewpoint_camera.FoVx - 2 * math.pi) < 1e-3:  # 接近360度
-        # 对于全景LiDAR，使用线性映射而不是tan投影
-        tanfovx = viewpoint_camera.image_width / (2 * math.pi)
+        # 对于全景LiDAR，使用适度的tanfov值避免极端投影
+        # 使用等效于60度的视场角，既能支持全景又不会导致数值问题
+        tanfovx = math.tan(math.pi / 6)  # 相当于60度视场角
+        print("[DEBUG] Using 360-degree panorama LiDAR mode")
     else:
         tanfovx = math.tan(viewpoint_camera.FoVx * 0.5)
+        print(f"[DEBUG] Using {math.degrees(viewpoint_camera.FoVx):.1f}-degree LiDAR mode")
     
     tanfovy = math.tan(viewpoint_camera.FoVy * 0.5)
 
@@ -96,7 +97,106 @@ def render_lidar(viewpoint_camera, pc: GaussianModel, pipe, bg_color: torch.Tens
         raydrop_probs                      # raydrop通道
     ], dim=1)  # (N, 3)
 
+    # 检查是否需要角度过滤（对于分割相机）
+    if hasattr(viewpoint_camera, 'horizontal_fov_start') and hasattr(viewpoint_camera, 'horizontal_fov_end'):
+        fov_start = viewpoint_camera.horizontal_fov_start
+        fov_end = viewpoint_camera.horizontal_fov_end
+        
+        # 如果不是全景相机（360度），则需要过滤点
+        if fov_end - fov_start < 359.0:  # 给1度的容差
+            print(f"[DEBUG] Filtering points for camera FOV: {fov_start:.1f}° to {fov_end:.1f}°")
+            
+            # 获取点在相机坐标系中的位置
+            world_to_camera = viewpoint_camera.world_view_transform[:3, :3]
+            
+            # 将点转换到相机坐标系
+            points_cam = torch.matmul(means3D - viewpoint_camera.camera_center, world_to_camera.T)
+            
+            # 计算水平角度（相对于相机朝向）
+            horizontal_angles = torch.atan2(points_cam[:, 0], -points_cam[:, 2])  # 相机Z轴向后
+            horizontal_angles_deg = torch.rad2deg(horizontal_angles)
+            
+            # 处理角度换行（-180到180度 -> 0到360度）
+            horizontal_angles_deg = (horizontal_angles_deg + 360.0) % 360.0
+            
+            # 处理跨越0度的FOV范围（例如300-60度）
+            if fov_end < fov_start:  # 跨越0度
+                angle_mask = (horizontal_angles_deg >= fov_start) | (horizontal_angles_deg <= fov_end)
+            else:  # 正常范围
+                angle_mask = (horizontal_angles_deg >= fov_start) & (horizontal_angles_deg <= fov_end)
+            
+            visible_count = angle_mask.sum().item()
+            total_count = len(angle_mask)
+            print(f"[DEBUG] Angle filtering: {visible_count}/{total_count} points visible")
+            
+            # 应用角度过滤到所有相关张量
+            if visible_count > 0:
+                filtered_means3D = means3D[angle_mask]
+                filtered_means2D = means2D[angle_mask]
+                filtered_means2D_abs = means2D_abs[angle_mask]
+                filtered_opacity = opacity[angle_mask]
+                filtered_scales = scales[angle_mask]
+                filtered_rotations = rotations[angle_mask]
+                filtered_shs = pc.get_features[angle_mask]
+                filtered_lidar_colors = lidar_colors[angle_mask]
+                filtered_cov3D_precomp = cov3D_precomp[angle_mask] if cov3D_precomp is not None else None
+            else:
+                # 没有可见点，创建空张量
+                print("[DEBUG] No points visible in this camera's FOV")
+                filtered_means3D = torch.empty((0, 3), device="cuda")
+                filtered_means2D = torch.empty((0, 2), device="cuda")
+                filtered_means2D_abs = torch.empty((0, 2), device="cuda")
+                filtered_opacity = torch.empty((0, 1), device="cuda")
+                filtered_scales = torch.empty((0, 3), device="cuda")
+                filtered_rotations = torch.empty((0, 4), device="cuda")
+                filtered_shs = torch.empty((0, pc.get_features.shape[1], pc.get_features.shape[2]), device="cuda")
+                filtered_lidar_colors = torch.empty((0, 3), device="cuda")
+                filtered_cov3D_precomp = None
+        else:
+            # 全景相机，使用所有点
+            filtered_means3D = means3D
+            filtered_means2D = means2D
+            filtered_means2D_abs = means2D_abs
+            filtered_opacity = opacity
+            filtered_scales = scales
+            filtered_rotations = rotations
+            filtered_shs = pc.get_features
+            filtered_lidar_colors = lidar_colors
+            filtered_cov3D_precomp = cov3D_precomp
+    else:
+        # 默认使用所有点
+        filtered_means3D = means3D
+        filtered_means2D = means2D
+        filtered_means2D_abs = means2D_abs
+        filtered_opacity = opacity
+        filtered_scales = scales
+        filtered_rotations = rotations
+        filtered_shs = pc.get_features
+        filtered_lidar_colors = lidar_colors
+        filtered_cov3D_precomp = cov3D_precomp
+
+    # 为LiDAR适配增大高斯基元尺度
+    lidar_scale_multiplier = 5.0  # 增大5倍尺度
+    if len(filtered_means3D) > 0:
+        adaptive_scale = torch.ones_like(filtered_scales[:, 0]) * lidar_scale_multiplier
+        
+        print(f"[DEBUG] Visible points: {len(filtered_means3D)}")
+        print(f"[DEBUG] exp(scales)统计: min={torch.exp(filtered_scales).min():.6f}, max={torch.exp(filtered_scales).max():.6f}")
+        
+        # 应用尺度调整
+        adjusted_scales = filtered_scales + torch.log(adaptive_scale).unsqueeze(-1)
+        print(f"[DEBUG] 调整后exp(scales)统计: min={torch.exp(adjusted_scales).min():.6f}, max={torch.exp(adjusted_scales).max():.6f}")
+    else:
+        adjusted_scales = filtered_scales
+
+    # 设置颜色
+    if override_color is None:
+        colors_precomp = filtered_lidar_colors
+    else:
+        colors_precomp = override_color
+
     # 设置光栅化器
+    # 对于360度全景LiDAR，恢复使用标准的frustum culling，但调整投影参数
     raster_settings = PlaneGaussianRasterizationSettings(
         image_height=int(viewpoint_camera.image_height),
         image_width=int(viewpoint_camera.image_width),
@@ -108,8 +208,8 @@ def render_lidar(viewpoint_camera, pc: GaussianModel, pipe, bg_color: torch.Tens
         projmatrix=viewpoint_camera.full_proj_transform,
         sh_degree=pc.active_sh_degree,
         campos=viewpoint_camera.camera_center,
-        prefiltered=False,
-        render_geo=return_plane,
+        prefiltered=False,  # 使用标准frustum culling
+        render_geo=True,  # LiDAR渲染始终使用PGSR平面模式
         debug=pipe.debug
     )
 
@@ -117,64 +217,44 @@ def render_lidar(viewpoint_camera, pc: GaussianModel, pipe, bg_color: torch.Tens
     
     results = {}
 
-    # 单次渲染调用
-    if return_plane:
-        # 准备平面信息
-        global_normal = pc.get_normal(viewpoint_camera)
-        local_normal = global_normal @ viewpoint_camera.world_view_transform[:3,:3]
-        pts_in_cam = means3D @ viewpoint_camera.world_view_transform[:3,:3] + viewpoint_camera.world_view_transform[3,:3]
-        local_distance = (local_normal * pts_in_cam).sum(-1).abs()
-        
-        input_all_map = torch.zeros((means3D.shape[0], 5)).cuda().float()
-        input_all_map[:, :3] = local_normal
-        input_all_map[:, 3] = 1.0
-        input_all_map[:, 4] = local_distance
+    # LiDAR渲染：始终使用PGSR平面模式获取真实深度
+    # 准备平面信息
+    global_normal = pc.get_normal(viewpoint_camera)
+    local_normal = global_normal @ viewpoint_camera.world_view_transform[:3,:3]
+    pts_in_cam = filtered_means3D @ viewpoint_camera.world_view_transform[:3,:3] + viewpoint_camera.world_view_transform[3,:3]
+    local_distance = (local_normal * pts_in_cam).sum(-1).abs()
+    
+    input_all_map = torch.zeros((filtered_means3D.shape[0], 5)).cuda().float()
+    input_all_map[:, :3] = local_normal
+    input_all_map[:, 3] = 1.0
+    input_all_map[:, 4] = local_distance
 
-        # 单次渲染调用：获取深度、intensity、raydrop和平面信息
-        rendered_image, radii, out_observe, out_all_map, plane_depth = rasterizer(
-            means3D=means3D,
-            means2D=means2D,
-            means2D_abs=means2D_abs,
-            shs=None,
-            colors_precomp=lidar_colors,
-            opacities=opacity,
-            scales=scales,
-            rotations=rotations,
-            all_map=input_all_map,
-            cov3D_precomp=cov3D_precomp
-        )
-        
-        # 解析多通道输出
-        results["depth"] = plane_depth
-        results["intensity"] = rendered_image[1:2]  # 第二个通道
-        results["raydrop"] = rendered_image[2:3]    # 第三个通道
-        results["rendered_normal"] = out_all_map[0:3]
-        results["rendered_alpha"] = out_all_map[3:4]
-        results["rendered_distance"] = out_all_map[4:5]
-        results["radii"] = radii
-        
-        # 计算深度法向量
-        if return_depth_normal:
-            depth_normal = render_normal(viewpoint_camera, plane_depth.squeeze())
-            results["depth_normal"] = depth_normal
-    else:
-        # 简单渲染（不使用平面信息）- 注意返回值数量不同
-        rendered_image, radii, out_observe, _, _ = rasterizer(
-            means3D=means3D,
-            means2D=means2D,
-            shs=None,
-            colors_precomp=lidar_colors,
-            opacities=opacity,
-            scales=scales,
-            rotations=rotations,
-            cov3D_precomp=cov3D_precomp
-        )
-        
-        # 解析多通道输出
-        results["depth"] = rendered_image[0:1]      # 第一个通道作为深度
-        results["intensity"] = rendered_image[1:2]  # 第二个通道
-        results["raydrop"] = rendered_image[2:3]    # 第三个通道
-        results["radii"] = radii
+    # 单次渲染调用：获取真实深度、intensity、raydrop和平面信息
+    rendered_image, radii, out_observe, out_all_map, plane_depth = rasterizer(
+        means3D=filtered_means3D,
+        means2D=filtered_means2D,
+        means2D_abs=filtered_means2D_abs,
+        shs=filtered_shs,
+        colors_precomp=colors_precomp,
+        opacities=filtered_opacity,
+        scales=adjusted_scales,
+        rotations=filtered_rotations,
+        all_map=input_all_map,
+        cov3D_precomp=filtered_cov3D_precomp
+    )
+    
+    # 解析渲染结果
+    results["depth"] = plane_depth  # PGSR计算的真实深度图
+    results["intensity"] = rendered_image[1:2]  # intensity通道
+    results["raydrop"] = rendered_image[2:3]    # raydrop通道
+    results["rendered_normal"] = out_all_map[0:3]
+    results["rendered_alpha"] = out_all_map[3:4]
+    results["rendered_distance"] = out_all_map[4:5]
+    results["radii"] = radii
+    
+    # 计算深度法向量
+    depth_normal = render_normal(viewpoint_camera, plane_depth.squeeze())
+    results["depth_normal"] = depth_normal
 
     # 保存屏幕空间点用于梯度计算
     results["viewspace_points"] = screenspace_points

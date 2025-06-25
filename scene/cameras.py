@@ -86,13 +86,8 @@ class Camera(nn.Module):
         self.original_image, self.image_gray, self.mask = None, None, None
         self.preload_img = preload_img
         self.ncc_scale = ncc_scale
-        if self.preload_img:
-            gt_image, gray_image, loaded_mask = process_image(self.image_path, self.resolution, ncc_scale)
-            self.original_image = gt_image.to(self.data_device)
-            self.original_image_gray = gray_image.to(self.data_device)
-            self.mask = loaded_mask
-
-        # LiDAR数据存储
+        
+        # LiDAR数据存储 - 先设置，再检查
         self.lidar_data = lidar_data
         if self.lidar_data is not None:
             # 将LiDAR数据转移到device
@@ -104,9 +99,31 @@ class Camera(nn.Module):
             self.range_image = None
             self.intensity_image = None
             self.valid_mask = None
+        
+        # 检查是否为LiDAR-only模式（没有真实图像文件）
+        image_exists = os.path.exists(self.image_path) if self.image_path else False
+        is_lidar_only = self.lidar_data is not None and not image_exists
+        
+        if self.preload_img and not is_lidar_only:
+            gt_image, gray_image, loaded_mask = process_image(self.image_path, self.resolution, ncc_scale)
+            self.original_image = gt_image.to(self.data_device)
+            self.original_image_gray = gray_image.to(self.data_device)
+            self.mask = loaded_mask
+        elif is_lidar_only:
+            # LiDAR-only模式：创建虚拟图像数据
+            print(f"LiDAR-only mode for camera {self.image_name}, skipping image loading")
+            # 创建黑色虚拟图像用于兼容性
+            self.original_image = torch.zeros((3, self.image_height, self.image_width), dtype=torch.float32).to(self.data_device)
+            self.original_image_gray = torch.zeros((1, self.image_height, self.image_width), dtype=torch.float32).to(self.data_device)
+            self.mask = None
 
-        self.zfar = 100.0
-        self.znear = 0.01
+        # 为LiDAR相机设置更大的远平面以适应KITTI-360数据集
+        if is_lidar_only:
+            self.zfar = 10000.0  # 10公里远平面，适应KITTI-360的距离范围
+            self.znear = 0.1     # 稍大的近平面避免精度问题
+        else:
+            self.zfar = 100.0    # 普通相机使用标准远平面
+            self.znear = 0.01
 
         self.trans = trans
         self.scale = scale
