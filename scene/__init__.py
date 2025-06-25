@@ -15,8 +15,13 @@ import json
 from utils.system_utils import searchForMaxIteration
 from scene.dataset_readers import sceneLoadTypeCallbacks
 from scene.gaussian_model import GaussianModel
-from arguments import ModelParams
 from utils.camera_utils import cameraList_from_camInfos, camera_to_JSON
+
+# 简化的配置类，替代原来的ModelParams
+class SimpleModelParams:
+    def __init__(self, **kwargs):
+        for key, value in kwargs.items():
+            setattr(self, key, value)
 import numpy as np
 import torch
 
@@ -24,7 +29,7 @@ class Scene:
 
     gaussians : GaussianModel
 
-    def __init__(self, args : ModelParams, gaussians : GaussianModel, load_iteration=None, shuffle=True, resolution_scales=[1.0]):
+    def __init__(self, args, gaussians : GaussianModel, load_iteration=None, shuffle=True, resolution_scales=[1.0]):
         """b
         :param path: Path to colmap scene main folder.
         """
@@ -49,8 +54,14 @@ class Scene:
         else:
             assert False, "Could not recognize scene type!"
 
-        # 保存LiDAR数据引用
+        # === 简化的LiDAR数据支持 ===
         self.lidar_data = getattr(scene_info, 'lidar_data', None)
+        
+        # 保留LiDAR数据引用，让相机直接使用
+        if self.lidar_data is not None:
+            print(f"[LiDAR Data] Found LiDAR data, will be passed to cameras")
+        else:
+            print("[LiDAR Data] No LiDAR data found")
 
         if not self.loaded_iter:
             with open(scene_info.ply_path, 'rb') as src_file, open(os.path.join(self.model_path, "input.ply") , 'wb') as dest_file:
@@ -137,3 +148,40 @@ class Scene:
 
     def getTestCameras(self, scale=1.0):
         return self.test_cameras[scale]
+    
+    # === 简化的LiDAR数据访问方法 ===
+    def getLiDARData(self):
+        """获取原始LiDAR数据"""
+        return self.lidar_data
+    
+    def getTrainCamerasLiDAR(self, scale=1.0, lidar_only=False):
+        """
+        获取训练相机，可选择仅返回LiDAR相机
+        
+        Args:
+            scale: 缩放因子
+            lidar_only: 是否仅返回LiDAR相机
+            
+        Returns:
+            list: 相机列表
+        """
+        cameras = self.getTrainCameras(scale)
+        if lidar_only:
+            return [cam for cam in cameras if hasattr(cam, 'is_lidar_camera') and cam.is_lidar_camera]
+        return cameras
+    
+    def getTestCamerasLiDAR(self, scale=1.0, lidar_only=False):
+        """
+        获取测试相机，可选择仅返回LiDAR相机
+        
+        Args:
+            scale: 缩放因子
+            lidar_only: 是否仅返回LiDAR相机
+            
+        Returns:
+            list: 相机列表
+        """
+        cameras = self.getTestCameras(scale)
+        if lidar_only:
+            return [cam for cam in cameras if hasattr(cam, 'is_lidar_camera') and cam.is_lidar_camera]
+        return cameras

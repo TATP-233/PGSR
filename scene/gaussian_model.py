@@ -41,7 +41,14 @@ class GaussianModel:
             symm = strip_symmetric(actual_covariance)
             return symm
         
-        self.scaling_activation = torch.exp
+        # 修复关键问题：添加尺度裁剪防止数值爆炸
+        def safe_scaling_activation(scaling_params):
+            # 将scaling参数限制在合理范围内：[-10, 5]
+            # 对应的exp(scaling)范围：[4.5e-5, 148.4]
+            clamped_scaling = torch.clamp(scaling_params, min=-10.0, max=5.0)
+            return torch.exp(clamped_scaling)
+        
+        self.scaling_activation = safe_scaling_activation
         self.scaling_inverse_activation = torch.log
 
         self.covariance_activation = build_covariance_from_scaling_rotation
@@ -144,6 +151,20 @@ class GaussianModel:
     def get_raydrop_sh(self):
         return self._raydrop_sh
     
+    @property
+    def get_features(self):
+        """兼容性属性：在LiDAR模式下返回intensity特征"""
+        # 为了兼容性，返回一个形状为(N, 3, 16)的张量（假设4度球谐）
+        # 实际上这个属性可能不会被使用，因为LiDAR渲染器应该使用具体的intensity和raydrop特征
+        num_points = self._intensity_sh.shape[0]
+        sh_coeffs = self._intensity_sh.shape[1]
+        # 创建一个虚拟的features张量，主要是为了满足接口要求
+        features = torch.zeros((num_points, 3, sh_coeffs), device=self._intensity_sh.device)
+        features[:, 0, :] = self._intensity_sh  # 第一个通道用intensity
+        if sh_coeffs == self._raydrop_sh.shape[1]:
+            features[:, 1, :] = self._raydrop_sh  # 第二个通道用raydrop
+        return features
+    
     def get_intensity(self, viewdirs):
         """
         计算给定视线方向的intensity值
@@ -171,6 +192,38 @@ class GaussianModel:
         # 使用球谐函数计算raydrop概率
         raydrop = eval_sh(self.lidar_sh_degree, raydrop_sh, viewdirs)  # (N, 1)
         return torch.sigmoid(raydrop)  # 确保概率在[0,1]范围内
+    
+    def get_rayhit_logits(self, viewdirs):
+        """
+        计算给定视线方向的rayhit logits (未经sigmoid处理)
+        参考lidar-rt设计，用于rayhit+raydrop的softmax计算
+        viewdirs: (N, 3) 归一化的视线方向
+        """
+        from utils.sh_utils import eval_sh
+        # 使用intensity_sh作为rayhit的基础，但进行不同的变换
+        # 这里我们创建一个简单的映射：高强度 -> 高命中概率
+        intensity_sh = self._intensity_sh.unsqueeze(1)  # (N, 1, 9)
+        
+        # 使用球谐函数计算rayhit logits
+        rayhit_logits = eval_sh(self.lidar_sh_degree, intensity_sh, viewdirs)  # (N, 1)
+        
+        # 将intensity logits映射为rayhit logits
+        # 高强度 -> 高命中概率，但保持logits格式
+        return rayhit_logits  # 返回原始logits，不使用sigmoid
+    
+    def get_raydrop_logits(self, viewdirs):
+        """
+        计算给定视线方向的raydrop logits (未经sigmoid处理)
+        参考lidar-rt设计，返回原始logits值
+        viewdirs: (N, 3) 归一化的视线方向
+        """
+        from utils.sh_utils import eval_sh
+        # 添加通道维度，使其与球谐函数兼容
+        raydrop_sh = self._raydrop_sh.unsqueeze(1)  # (N, 1, 9)
+        
+        # 使用球谐函数计算raydrop logits
+        raydrop_logits = eval_sh(self.lidar_sh_degree, raydrop_sh, viewdirs)  # (N, 1)
+        return raydrop_logits  # 返回原始logits，不使用sigmoid
     
     def get_smallest_axis(self, return_idx=False):
         rotation_matrices = self.get_rotation_matrix()
@@ -212,36 +265,26 @@ class GaussianModel:
         # 计算点到原点的距离（作为深度的代理）
         point_depths = torch.norm(fused_point_cloud, dim=1)
         
-        # 为KITTI-360数据集设置更合适的最小尺度
-        # 原问题：torch.log(dist)如果dist很小会产生很大的负值，导致exp(scales)极小
-        # 新方案：基于深度自适应设置尺度，确保远距离点有足够大的投影尺度
+        # 为KITTI-360数据集设置保守且合理的尺度初始化
+        # 修复关键问题：避免巨大的初始尺度值
         min_dist = 0.1  # 最小距离设为0.1米
         dist = torch.clamp(dist, min=min_dist)
         
-        # 自适应尺度：对于距离很远的点，增加基础尺度
-        # 目标：在远距离处保证投影半径至少1-2像素
-        # 假设焦距约500像素，目标投影半径2像素
-        # scale * focal / depth >= 2
-        # scale >= 2 * depth / focal
-        target_radius_pixels = 2.0
-        focal_approx = 500.0  # 近似焦距
+        # 保守的尺度初始化策略
+        # 目标：创建合理大小的高斯基元，避免数值爆炸
+        base_scale = 0.2  # 基础尺度0.2米 (合理的LiDAR点尺度)
         
-        # 计算所需的最小尺度
-        required_scale = target_radius_pixels * point_depths / focal_approx
+        # 基于最近邻距离的适度调整
+        distance_factor = torch.clamp(dist / 1.0, min=0.5, max=3.0)  # 限制在[0.5, 3.0]
         
-        # 使用距离和深度的较大值作为基础尺度
-        adaptive_scale = torch.maximum(dist, required_scale * 0.3)  # 使用30%的所需尺度作为基础
+        # 最终尺度：基础尺度 × 距离因子
+        adaptive_scale = base_scale * distance_factor
         
-        print(f"点云距离统计: min={dist.min():.4f}, max={dist.max():.4f}, mean={dist.mean():.4f}")
-        print(f"点云深度统计: min={point_depths.min():.4f}, max={point_depths.max():.4f}, mean={point_depths.mean():.4f}")
-        print(f"所需尺度统计: min={required_scale.min():.4f}, max={required_scale.max():.4f}, mean={required_scale.mean():.4f}")
-        print(f"自适应尺度统计: min={adaptive_scale.min():.4f}, max={adaptive_scale.max():.4f}, mean={adaptive_scale.mean():.4f}")
+        # 直接使用适度的对数尺度，不使用巨大的乘数
+        scales = torch.log(adaptive_scale)[...,None].repeat(1, 3)
         
-        # 为LiDAR增加额外的尺度缩放因子，解决可见点太少的问题
-        lidar_scale_multiplier = 5.0  # 增大5倍尺度
-        scales = torch.log(adaptive_scale * lidar_scale_multiplier)[...,None].repeat(1, 3)
-        print(f"初始尺度统计: min={scales.min():.4f}, max={scales.max():.4f}, mean={scales.mean():.4f}")
-        print(f"exp(scales)统计: min={torch.exp(scales).min():.6f}, max={torch.exp(scales).max():.6f}")
+        # 安全检查：确保对数尺度在合理范围内
+        scales = torch.clamp(scales, min=-2.0, max=1.5)  # 对应exp范围[0.135, 4.48]
         
         rots = torch.zeros((fused_point_cloud.shape[0], 4), device="cuda")
         rots[:, 0] = 1
@@ -339,6 +382,16 @@ class GaussianModel:
             l.append('scale_{}'.format(i))
         for i in range(self._rotation.shape[1]):
             l.append('rot_{}'.format(i))
+        
+        # 添加LiDAR模式下的球谐函数属性
+        if hasattr(self, '_intensity_sh') and self._intensity_sh.shape[0] > 0:
+            for i in range(self._intensity_sh.shape[1]):
+                l.append('intensity_sh_{}'.format(i))
+        
+        if hasattr(self, '_raydrop_sh') and self._raydrop_sh.shape[0] > 0:
+            for i in range(self._raydrop_sh.shape[1]):
+                l.append('raydrop_sh_{}'.format(i))
+        
         return l
 
     def save_ply(self, path, mask=None):
@@ -350,9 +403,41 @@ class GaussianModel:
         scale = self._scaling.detach().cpu().numpy()
         rotation = self._rotation.detach().cpu().numpy()
 
+        # 准备LiDAR属性
+        intensity_sh = None
+        raydrop_sh = None
+        
+        if hasattr(self, '_intensity_sh') and self._intensity_sh.shape[0] > 0:
+            intensity_sh = self._intensity_sh.detach().cpu().numpy()
+        
+        if hasattr(self, '_raydrop_sh') and self._raydrop_sh.shape[0] > 0:
+            raydrop_sh = self._raydrop_sh.detach().cpu().numpy()
+
+        # 应用掩码
+        if mask is not None:
+            xyz = xyz[mask]
+            normals = normals[mask]
+            opacities = opacities[mask]
+            scale = scale[mask]
+            rotation = rotation[mask]
+            if intensity_sh is not None:
+                intensity_sh = intensity_sh[mask]
+            if raydrop_sh is not None:
+                raydrop_sh = raydrop_sh[mask]
+
         dtype_full = [(attribute, 'f4') for attribute in self.construct_list_of_attributes()]
         elements = np.empty(xyz.shape[0], dtype=dtype_full)
-        attributes = np.concatenate((xyz, normals, opacities, scale, rotation), axis=1)
+        
+        # 构建属性数组
+        attributes = [xyz, normals, opacities, scale, rotation]
+        
+        # 添加LiDAR属性
+        if intensity_sh is not None:
+            attributes.append(intensity_sh)
+        if raydrop_sh is not None:
+            attributes.append(raydrop_sh)
+        
+        attributes = np.concatenate(attributes, axis=1)
         elements[:] = list(map(tuple, attributes))
         el = PlyElement.describe(elements, 'vertex')
         PlyData([el]).write(path)
@@ -386,6 +471,23 @@ class GaussianModel:
         self._scaling = nn.Parameter(torch.tensor(scales, dtype=torch.float, device="cuda").requires_grad_(True))
         self._rotation = nn.Parameter(torch.tensor(rots, dtype=torch.float, device="cuda").requires_grad_(True))
         self._opacity = nn.Parameter(torch.tensor(opacities, dtype=torch.float, device="cuda").requires_grad_(True))
+
+        # 加载LiDAR属性（如果存在）
+        intensity_sh_names = [p.name for p in plydata.elements[0].properties if p.name.startswith("intensity_sh_")]
+        if intensity_sh_names:
+            intensity_sh_names = sorted(intensity_sh_names, key = lambda x: int(x.split('_')[-1]))
+            intensity_sh = np.zeros((xyz.shape[0], len(intensity_sh_names)))
+            for idx, attr_name in enumerate(intensity_sh_names):
+                intensity_sh[:, idx] = np.asarray(plydata.elements[0][attr_name])
+            self._intensity_sh = nn.Parameter(torch.tensor(intensity_sh, dtype=torch.float, device="cuda").requires_grad_(True))
+        
+        raydrop_sh_names = [p.name for p in plydata.elements[0].properties if p.name.startswith("raydrop_sh_")]
+        if raydrop_sh_names:
+            raydrop_sh_names = sorted(raydrop_sh_names, key = lambda x: int(x.split('_')[-1]))
+            raydrop_sh = np.zeros((xyz.shape[0], len(raydrop_sh_names)))
+            for idx, attr_name in enumerate(raydrop_sh_names):
+                raydrop_sh[:, idx] = np.asarray(plydata.elements[0][attr_name])
+            self._raydrop_sh = nn.Parameter(torch.tensor(raydrop_sh, dtype=torch.float, device="cuda").requires_grad_(True))
 
         self.active_sh_degree = self.max_sh_degree
 
@@ -556,9 +658,11 @@ class GaussianModel:
                 prune_filter = torch.cat((selected_pts_mask, torch.zeros(expected_new_points, device=selected_pts_mask.device, dtype=bool)))
                 self.prune_points(prune_filter)
             else:
-                print(f"[DEBUG] Unexpected point count after densification: {current_n_points}, expected {n_init_points + expected_new_points}")
+                # print(f"[DEBUG] Unexpected point count after densification: {current_n_points}, expected {n_init_points + expected_new_points}")
+                pass
         else:
-            print(f"[DEBUG] No points selected for splitting")
+            # print(f"[DEBUG] No points selected for splitting")
+            pass
 
     def densify_and_clone(self, grads, grad_threshold, scene_extent):
         n_init_points = self.get_xyz.shape[0]
@@ -596,7 +700,7 @@ class GaussianModel:
     def densify_and_prune(self, max_grad, abs_max_grad, min_opacity, extent, max_screen_size):
         # 检查梯度累积器是否已初始化
         if len(self.xyz_gradient_accum) == 0 or len(self.denom) == 0:
-            print(f"[DEBUG] Skipping densify_and_prune: gradient accumulators not initialized")
+            # print(f"[DEBUG] Skipping densify_and_prune: gradient accumulators not initialized")
             return
             
         grads = self.xyz_gradient_accum / self.denom
@@ -613,7 +717,8 @@ class GaussianModel:
         # 因为densify_and_clone可能已经改变了点的数量
         if len(self.xyz_gradient_accum) != self.get_xyz.shape[0]:
             # 如果梯度累积器的大小与当前点数不匹配，重新计算梯度
-            print(f"[DEBUG] Point count changed after clone, skipping split")
+            # print(f"[DEBUG] Point count changed after clone, skipping split")
+            pass
         else:
             self.densify_and_split(grads, max_grad, grads_abs, abs_max_grad, extent, max_radii2D)
 
@@ -631,7 +736,7 @@ class GaussianModel:
         # 如果梯度累积器为空，重新初始化（第一次有可见点时）
         if len(self.xyz_gradient_accum) == 0 and update_filter.sum() > 0:
             num_points = self.get_xyz.shape[0]
-            print(f"[DEBUG] Reinitializing gradient accumulators for {num_points} points")
+            # print(f"[DEBUG] Reinitializing gradient accumulators for {num_points} points")
             self.xyz_gradient_accum = torch.zeros((num_points, 1), device="cuda")
             self.xyz_gradient_accum_abs = torch.zeros((num_points, 1), device="cuda")
             self.denom = torch.zeros((num_points, 1), device="cuda")
@@ -639,15 +744,15 @@ class GaussianModel:
         
         # 检查形状是否匹配
         if len(self.xyz_gradient_accum) == 0 or len(self.xyz_gradient_accum_abs) == 0:
-            print(f"[DEBUG] Skipping densification stats due to empty gradient accumulators")
+            # print(f"[DEBUG] Skipping densification stats due to empty gradient accumulators")
             return
         
         if viewspace_point_tensor.grad is None or viewspace_point_tensor_abs.grad is None:
-            print(f"[DEBUG] Skipping densification stats due to None gradients")
+            # print(f"[DEBUG] Skipping densification stats due to None gradients")
             return
         
         if update_filter.sum() == 0:
-            print(f"[DEBUG] Skipping densification stats due to no visible points")
+            # print(f"[DEBUG] Skipping densification stats due to no visible points")
             return
         
         self.xyz_gradient_accum[update_filter] += torch.norm(viewspace_point_tensor.grad[update_filter,:2], dim=-1, keepdim=True)

@@ -1,0 +1,13 @@
+.vscode
+
+*build/*
+*__pycache__*
+*.pyc
+
+data/*
+submodules/simple-knn/build/*
+lidar-rt*
+output/*
+
+*.ipynb
+*.so

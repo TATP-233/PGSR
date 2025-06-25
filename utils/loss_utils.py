@@ -21,6 +21,28 @@ def l1_loss(network_output, gt):
 def l2_loss(network_output, gt):
     return ((network_output - gt) ** 2).mean()
 
+def mse(img1, img2):
+    return (((img1 - img2)) ** 2).view(img1.shape[0], -1).mean(1, keepdim=True)
+
+def psnr(img1, img2, mask=None):
+    '''
+    img1, img2: (C, H, W)
+    mask: (1, H, W)
+    '''
+
+    img1 = img1.permute(1, 2, 0)
+    img2 = img2.permute(1, 2, 0)
+
+    if mask is not None:
+        mask = mask.squeeze(0)
+        img1 = img1[mask]
+        img2 = img2[mask]
+
+    # mse = ((img1 - img2) ** 2).view(-1, img1.shape[-1]).mean(dim=0, keepdim=True)
+    mse = torch.mean((img1 - img2) ** 2)
+    psnr = 20 * torch.log10(1.0 / torch.sqrt(mse))
+    return psnr
+
 def gaussian(window_size, sigma):
     gauss = torch.Tensor([exp(-(x - window_size // 2) ** 2 / float(2 * sigma ** 2)) for x in range(window_size)])
     return gauss / gauss.sum()
@@ -88,6 +110,22 @@ def ssim2(img1, img2, window_size=11):
     ssim_map = ((2 * mu1_mu2 + C1) * (2 * sigma12 + C2)) / ((mu1_sq + mu2_sq + C1) * (sigma1_sq + sigma2_sq + C2))
 
     return ssim_map.mean(0)
+
+
+class BinaryCrossEntropyLoss(torch.nn.Module):
+    def __init__(self):
+        super(BinaryCrossEntropyLoss, self).__init__()
+        self.bce_logit = torch.nn.BCEWithLogitsLoss()
+        self.bce = torch.nn.BCELoss()
+
+    def forward(self, labels, logits = None, preds = None):
+        if logits is not None:
+            onehot = torch.nn.functional.one_hot(labels, num_classes=2)
+            loss =  - torch.log_softmax(logits, dim=1) * onehot
+            loss = loss.mean()
+        elif preds is not None:
+            loss = self.bce(preds, labels.float())
+        return loss
 
 def get_img_grad_weight(img, beta=2.0):
     _, hd, wd = img.shape 

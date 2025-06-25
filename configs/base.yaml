@@ -7,7 +7,7 @@ detect_anomaly: true
 # 模型参数
 model:
   sh_degree: 3
-  source_path: ""
+  source_path: "data/kitti360"
   model_path: ""
   images: "images"
   resolution: -1
@@ -100,6 +100,12 @@ opt:
   max_all_points: 6000000
   
   random_background: false
+  
+  # === 评估参数（参考lidar-rt）===
+  eval_interval: 500           # 训练中评估间隔（每N次迭代评估一次）
+  use_rayhit: false           # 是否使用rayhit+raydrop的联合softmax模式
+  lambda_raydrop_logits: 0.1  # Raydrop logits损失权重
+  lambda_rayhit_raydrop: 0.1  # 联合rayhit+raydrop损失权重
 
 # 数据加载参数
 data:
@@ -119,7 +125,29 @@ testing_iterations: 1000
 saving_iterations: [15000, 20000, 25000, 30000]
 visual_interval: 1000
 
+# === 评估设置（参考lidar-rt）===
+evaluation:
+  # 评估指标设置
+  depth_metrics: ["rmse", "mae", "medae", "lpips_loss", "ssim", "psnr"]
+  intensity_metrics: ["rmse", "mae", "medae", "lpips_loss", "ssim", "psnr"] 
+  raydrop_metrics: ["rmse", "acc", "f1"]
+  points_metrics: ["chamfer_dist", "fscore"]
+  
+  # 评估参数
+  raydrop_ratio: 0.4          # raydrop阈值
+  fscore_threshold: 0.05      # F-score计算阈值
+  max_depth: 80.0             # 深度评估的最大值
+  max_intensity: 1.0          # 强度评估的最大值
+  
+  # 评估输出设置
+  save_per_frame: false       # 是否保存每帧的详细结果
+  save_visualizations: false  # 是否保存可视化结果
+  max_eval_cameras: 10        # 训练中评估的最大相机数量
+
 # 输出设置
 model_dir: "output"
 task_name: "lidar_pgsr"
-exp_name: "default" 
+exp_name: "default"
+
+# 日志设置
+disable_tensorboard: false  # 设置为true可禁用tensorboard日志 

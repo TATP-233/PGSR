@@ -204,8 +204,8 @@ def readKITTI360Info(path, images=None, eval=False, args=None, cam_split_mode="t
         lidar_world_pos = lidar2world_matrix[:3, 3]  # LiDAR在世界坐标系中的位置
         lidar_world_rot = lidar2world_matrix[:3, :3]  # LiDAR在世界坐标系中的旋转
         
-        print(f"[DEBUG] Frame {frame}: LiDAR world position = {lidar_world_pos}")
-        print(f"[DEBUG] Frame {frame}: LiDAR world rotation =\n{lidar_world_rot}")
+        # print(f"[DEBUG] Frame {frame}: LiDAR world position = {lidar_world_pos}")
+        # print(f"[DEBUG] Frame {frame}: LiDAR world rotation =\n{lidar_world_rot}")
         
         if cam_split_mode == "triple":
             # 创建三个120度相机，分别覆盖不同的水平角度范围
@@ -244,13 +244,13 @@ def readKITTI360Info(path, images=None, eval=False, args=None, cam_split_mode="t
                 world_to_camera_translation = -camera_to_world_rotation.T @ lidar_world_pos
                 T = world_to_camera_translation
                 
-                print(f"[DEBUG] Frame {frame} Cam {cam_idx}: Camera R (camera-to-world) =\n{R}")
-                print(f"[DEBUG] Frame {frame} Cam {cam_idx}: Camera T (world-to-camera translation) = {T}")
+                # print(f"[DEBUG] Frame {frame} Cam {cam_idx}: Camera R (camera-to-world) =\n{R}")
+                # print(f"[DEBUG] Frame {frame} Cam {cam_idx}: Camera T (world-to-camera translation) = {T}")
                 
                 # 验证相机中心是否正确
                 expected_camera_center = lidar_world_pos  # 所有分割相机共享同一中心
-                print(f"[DEBUG] Frame {frame} Cam {cam_idx}: Expected camera center = {expected_camera_center}")
-                print(f"[DEBUG] Frame {frame} Cam {cam_idx}: Should match LiDAR world position = {lidar_world_pos}")
+                # print(f"[DEBUG] Frame {frame} Cam {cam_idx}: Expected camera center = {expected_camera_center}")
+                # print(f"[DEBUG] Frame {frame} Cam {cam_idx}: Should match LiDAR world position = {lidar_world_pos}")
                 
                 # 计算相机中心误差用于验证
                 # 从world-to-view变换矩阵中提取相机中心
@@ -258,7 +258,7 @@ def readKITTI360Info(path, images=None, eval=False, args=None, cam_split_mode="t
                 C2W = np.linalg.inv(world_view_transform)
                 camera_center_from_transform = C2W[:3, 3]
                 camera_center_error = np.linalg.norm(camera_center_from_transform - expected_camera_center)
-                print(f"[DEBUG] Frame {frame} Cam {cam_idx}: Camera center error = {camera_center_error:.6f}")
+                # print(f"[DEBUG] Frame {frame} Cam {cam_idx}: Camera center error = {camera_center_error:.6f}")
                 
                 # 120度水平FOV，保持原有的垂直FOV
                 FoVx = np.radians(120.0)  # 120度水平视场角
@@ -273,8 +273,8 @@ def readKITTI360Info(path, images=None, eval=False, args=None, cam_split_mode="t
                     uid=len(train_cam_infos),
                     R=R,
                     T=T,
-                    FoVx=FoVx,
-                    FoVy=FoVy,
+                    FoVX=FoVx,
+                    FoVY=FoVy,
                     image=None,  # LiDAR模式下不需要图像
                     image_path=None,
                     image_name=f"frame_{frame:06d}_cam_{cam_idx}",
@@ -306,13 +306,13 @@ def readKITTI360Info(path, images=None, eval=False, args=None, cam_split_mode="t
             world_to_camera_translation = -camera_to_world_rotation.T @ lidar_world_pos
             T = world_to_camera_translation
             
-            print(f"[DEBUG] Frame {frame}: Camera R (camera-to-world) =\n{R}")
-            print(f"[DEBUG] Frame {frame}: Camera T (world-to-camera translation) = {T}")
+            # print(f"[DEBUG] Frame {frame}: Camera R (camera-to-world) =\n{R}")
+            # print(f"[DEBUG] Frame {frame}: Camera T (world-to-camera translation) = {T}")
             
             # 验证相机中心是否正确
             expected_camera_center = lidar_world_pos
-            print(f"[DEBUG] Frame {frame}: Expected camera center = {expected_camera_center}")
-            print(f"[DEBUG] Frame {frame}: Should match LiDAR world position = {lidar_world_pos}")
+            # print(f"[DEBUG] Frame {frame}: Expected camera center = {expected_camera_center}")
+            # print(f"[DEBUG] Frame {frame}: Should match LiDAR world position = {lidar_world_pos}")
             
             # 计算相机中心误差用于验证
             # 从world-to-view变换矩阵中提取相机中心
@@ -320,7 +320,7 @@ def readKITTI360Info(path, images=None, eval=False, args=None, cam_split_mode="t
             C2W = np.linalg.inv(world_view_transform)
             camera_center_from_transform = C2W[:3, 3]
             camera_center_error = np.linalg.norm(camera_center_from_transform - expected_camera_center)
-            print(f"[DEBUG] Frame {frame}: Camera center error = {camera_center_error:.6f}")
+            # print(f"[DEBUG] Frame {frame}: Camera center error = {camera_center_error:.6f}")
             
             # 360度全景相机
             FoVx = 2 * np.pi  # 360度水平视场角
@@ -331,8 +331,8 @@ def readKITTI360Info(path, images=None, eval=False, args=None, cam_split_mode="t
                 uid=len(train_cam_infos),
                 R=R,
                 T=T,
-                FoVx=FoVx,
-                FoVy=FoVy,
+                FoVX=FoVx,
+                FoVY=FoVy,
                 image=None,  # LiDAR模式下不需要图像
                 image_path=None,
                 image_name=f"frame_{frame:06d}",

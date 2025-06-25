@@ -1,0 +1,609 @@
+/usr/bin/cursor: 忽略输入
+Jitting Chamfer 3D
+/home/tatp/miniconda3/envs/pgsr/lib/python3.8/site-packages/torch/utils/cpp_extension.py:1965: UserWarning: TORCH_CUDA_ARCH_LIST is not set, all archs for visible cards are included for compilation. 
+If this is not desired, please set os.environ['TORCH_CUDA_ARCH_LIST'].
+  warnings.warn(
+Loaded JIT 3D CUDA chamfer distance
+Successfully imported lidar-rt modules: chamfer3D and lpipsPyTorch
+Successfully imported lidar-rt evaluation modules
+Running in CONFIG mode with config: configs/kitti360/static/1.yaml
+Optimizing: seq00_static_test
+Scene: default
+Iterations: 20000
+Optimizing: seq00_static_test [25/06 23:11:54]
+Scene: unknown [25/06 23:11:54]
+Iterations: 20000 [25/06 23:11:54]
+Output folder: output/lidar_pgsr_kitti360/seq00_static_test/20250625-231154 [25/06 23:11:54]
+Config saved to: output/lidar_pgsr_kitti360/seq00_static_test/20250625-231154/config.yaml [25/06 23:11:54]
+Found data_3d_raw folder, assuming KITTI-360 dataset! [25/06 23:11:54]
+Found data_3d_raw folder, assuming KITTI-360 dataset! [25/06 23:11:54]
+Using frame range: [1538, 1601], sequence: 0000 [25/06 23:11:54]
+Loading KITTI-360 sequence: 2013_05_28_drive_0000_sync, frames: [1538, 1601] [25/06 23:11:54]
+Found 64 valid frames with both LiDAR and pose data [25/06 23:11:55]
+Training cameras: 192, Test cameras: 0 [25/06 23:11:55]
+Generated point cloud with 113683 points [25/06 23:11:55]
+[LiDAR Data] Found LiDAR data, will be passed to cameras [25/06 23:11:55]
+cameras_extent 33.318860435485846 [25/06 23:11:55]
+Loading Training Cameras [25/06 23:11:55]
+load camera 0[LiDAR Data] Loaded for frame_001538_cam_0: frame=1538, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:11:55]
+[LiDAR Camera] frame_001538_cam_0: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:11:55]
+LiDAR-only mode for camera frame_001538_cam_0, skipping image loading [25/06 23:11:55]
+load camera 1[LiDAR Data] Loaded for frame_001538_cam_1: frame=1538, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:11:55]
+[LiDAR Camera] frame_001538_cam_1: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:11:55]
+LiDAR-only mode for camera frame_001538_cam_1, skipping image loading [25/06 23:11:55]
+load camera 2[LiDAR Data] Loaded for frame_001538_cam_2: frame=1538, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:11:55]
+[LiDAR Camera] frame_001538_cam_2: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:11:55]
+LiDAR-only mode for camera frame_001538_cam_2, skipping image loading [25/06 23:11:55]
+load camera 3[LiDAR Data] Loaded for frame_001539_cam_0: frame=1539, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:11:56]
+[LiDAR Camera] frame_001539_cam_0: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:11:56]
+LiDAR-only mode for camera frame_001539_cam_0, skipping image loading [25/06 23:11:56]
+load camera 4[LiDAR Data] Loaded for frame_001539_cam_1: frame=1539, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:11:56]
+[LiDAR Camera] frame_001539_cam_1: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:11:56]
+LiDAR-only mode for camera frame_001539_cam_1, skipping image loading [25/06 23:11:56]
+load camera 5[LiDAR Data] Loaded for frame_001539_cam_2: frame=1539, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:11:56]
+[LiDAR Camera] frame_001539_cam_2: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:11:56]
+LiDAR-only mode for camera frame_001539_cam_2, skipping image loading [25/06 23:11:56]
+load camera 6[LiDAR Data] Loaded for frame_001540_cam_0: frame=1540, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:11:56]
+[LiDAR Camera] frame_001540_cam_0: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:11:56]
+LiDAR-only mode for camera frame_001540_cam_0, skipping image loading [25/06 23:11:56]
+load camera 7[LiDAR Data] Loaded for frame_001540_cam_1: frame=1540, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:11:56]
+[LiDAR Camera] frame_001540_cam_1: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:11:56]
+LiDAR-only mode for camera frame_001540_cam_1, skipping image loading [25/06 23:11:56]
+load camera 8[LiDAR Data] Loaded for frame_001540_cam_2: frame=1540, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:11:56]
+[LiDAR Camera] frame_001540_cam_2: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:11:56]
+LiDAR-only mode for camera frame_001540_cam_2, skipping image loading [25/06 23:11:56]
+load camera 9[LiDAR Data] Loaded for frame_001541_cam_0: frame=1541, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:11:57]
+[LiDAR Camera] frame_001541_cam_0: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:11:57]
+LiDAR-only mode for camera frame_001541_cam_0, skipping image loading [25/06 23:11:57]
+load camera 10[LiDAR Data] Loaded for frame_001541_cam_1: frame=1541, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:11:57]
+[LiDAR Camera] frame_001541_cam_1: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:11:57]
+LiDAR-only mode for camera frame_001541_cam_1, skipping image loading [25/06 23:11:57]
+load camera 11[LiDAR Data] Loaded for frame_001541_cam_2: frame=1541, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:11:57]
+[LiDAR Camera] frame_001541_cam_2: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:11:57]
+LiDAR-only mode for camera frame_001541_cam_2, skipping image loading [25/06 23:11:57]
+load camera 12[LiDAR Data] Loaded for frame_001542_cam_0: frame=1542, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:11:57]
+[LiDAR Camera] frame_001542_cam_0: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:11:57]
+LiDAR-only mode for camera frame_001542_cam_0, skipping image loading [25/06 23:11:57]
+load camera 13[LiDAR Data] Loaded for frame_001542_cam_1: frame=1542, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:11:57]
+[LiDAR Camera] frame_001542_cam_1: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:11:57]
+LiDAR-only mode for camera frame_001542_cam_1, skipping image loading [25/06 23:11:57]
+load camera 14[LiDAR Data] Loaded for frame_001542_cam_2: frame=1542, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:11:57]
+[LiDAR Camera] frame_001542_cam_2: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:11:57]
+LiDAR-only mode for camera frame_001542_cam_2, skipping image loading [25/06 23:11:57]
+load camera 15[LiDAR Data] Loaded for frame_001543_cam_0: frame=1543, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:11:58]
+[LiDAR Camera] frame_001543_cam_0: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:11:58]
+LiDAR-only mode for camera frame_001543_cam_0, skipping image loading [25/06 23:11:58]
+load camera 16[LiDAR Data] Loaded for frame_001543_cam_1: frame=1543, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:11:58]
+[LiDAR Camera] frame_001543_cam_1: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:11:58]
+LiDAR-only mode for camera frame_001543_cam_1, skipping image loading [25/06 23:11:58]
+load camera 17[LiDAR Data] Loaded for frame_001543_cam_2: frame=1543, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:11:58]
+[LiDAR Camera] frame_001543_cam_2: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:11:58]
+LiDAR-only mode for camera frame_001543_cam_2, skipping image loading [25/06 23:11:58]
+load camera 18[LiDAR Data] Loaded for frame_001544_cam_0: frame=1544, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:11:58]
+[LiDAR Camera] frame_001544_cam_0: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:11:58]
+LiDAR-only mode for camera frame_001544_cam_0, skipping image loading [25/06 23:11:58]
+load camera 19[LiDAR Data] Loaded for frame_001544_cam_1: frame=1544, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:11:58]
+[LiDAR Camera] frame_001544_cam_1: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:11:58]
+LiDAR-only mode for camera frame_001544_cam_1, skipping image loading [25/06 23:11:58]
+load camera 20[LiDAR Data] Loaded for frame_001544_cam_2: frame=1544, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:11:58]
+[LiDAR Camera] frame_001544_cam_2: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:11:58]
+LiDAR-only mode for camera frame_001544_cam_2, skipping image loading [25/06 23:11:58]
+load camera 21[LiDAR Data] Loaded for frame_001545_cam_0: frame=1545, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:11:59]
+[LiDAR Camera] frame_001545_cam_0: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:11:59]
+LiDAR-only mode for camera frame_001545_cam_0, skipping image loading [25/06 23:11:59]
+load camera 22[LiDAR Data] Loaded for frame_001545_cam_1: frame=1545, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:11:59]
+[LiDAR Camera] frame_001545_cam_1: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:11:59]
+LiDAR-only mode for camera frame_001545_cam_1, skipping image loading [25/06 23:11:59]
+load camera 23[LiDAR Data] Loaded for frame_001545_cam_2: frame=1545, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:11:59]
+[LiDAR Camera] frame_001545_cam_2: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:11:59]
+LiDAR-only mode for camera frame_001545_cam_2, skipping image loading [25/06 23:11:59]
+load camera 24[LiDAR Data] Loaded for frame_001546_cam_0: frame=1546, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:11:59]
+[LiDAR Camera] frame_001546_cam_0: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:11:59]
+LiDAR-only mode for camera frame_001546_cam_0, skipping image loading [25/06 23:11:59]
+load camera 25[LiDAR Data] Loaded for frame_001546_cam_1: frame=1546, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:11:59]
+[LiDAR Camera] frame_001546_cam_1: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:11:59]
+LiDAR-only mode for camera frame_001546_cam_1, skipping image loading [25/06 23:11:59]
+load camera 26[LiDAR Data] Loaded for frame_001546_cam_2: frame=1546, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:11:59]
+[LiDAR Camera] frame_001546_cam_2: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:11:59]
+LiDAR-only mode for camera frame_001546_cam_2, skipping image loading [25/06 23:11:59]
+load camera 27[LiDAR Data] Loaded for frame_001547_cam_0: frame=1547, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:00]
+[LiDAR Camera] frame_001547_cam_0: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:00]
+LiDAR-only mode for camera frame_001547_cam_0, skipping image loading [25/06 23:12:00]
+load camera 28[LiDAR Data] Loaded for frame_001547_cam_1: frame=1547, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:00]
+[LiDAR Camera] frame_001547_cam_1: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:00]
+LiDAR-only mode for camera frame_001547_cam_1, skipping image loading [25/06 23:12:00]
+load camera 29[LiDAR Data] Loaded for frame_001547_cam_2: frame=1547, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:00]
+[LiDAR Camera] frame_001547_cam_2: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:00]
+LiDAR-only mode for camera frame_001547_cam_2, skipping image loading [25/06 23:12:00]
+load camera 30[LiDAR Data] Loaded for frame_001548_cam_0: frame=1548, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:00]
+[LiDAR Camera] frame_001548_cam_0: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:00]
+LiDAR-only mode for camera frame_001548_cam_0, skipping image loading [25/06 23:12:00]
+load camera 31[LiDAR Data] Loaded for frame_001548_cam_1: frame=1548, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:00]
+[LiDAR Camera] frame_001548_cam_1: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:00]
+LiDAR-only mode for camera frame_001548_cam_1, skipping image loading [25/06 23:12:00]
+load camera 32[LiDAR Data] Loaded for frame_001548_cam_2: frame=1548, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:01]
+[LiDAR Camera] frame_001548_cam_2: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:01]
+LiDAR-only mode for camera frame_001548_cam_2, skipping image loading [25/06 23:12:01]
+load camera 33[LiDAR Data] Loaded for frame_001549_cam_0: frame=1549, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:01]
+[LiDAR Camera] frame_001549_cam_0: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:01]
+LiDAR-only mode for camera frame_001549_cam_0, skipping image loading [25/06 23:12:01]
+load camera 34[LiDAR Data] Loaded for frame_001549_cam_1: frame=1549, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:01]
+[LiDAR Camera] frame_001549_cam_1: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:01]
+LiDAR-only mode for camera frame_001549_cam_1, skipping image loading [25/06 23:12:01]
+load camera 35[LiDAR Data] Loaded for frame_001549_cam_2: frame=1549, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:01]
+[LiDAR Camera] frame_001549_cam_2: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:01]
+LiDAR-only mode for camera frame_001549_cam_2, skipping image loading [25/06 23:12:01]
+load camera 36[LiDAR Data] Loaded for frame_001550_cam_0: frame=1550, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:01]
+[LiDAR Camera] frame_001550_cam_0: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:01]
+LiDAR-only mode for camera frame_001550_cam_0, skipping image loading [25/06 23:12:01]
+load camera 37[LiDAR Data] Loaded for frame_001550_cam_1: frame=1550, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:02]
+[LiDAR Camera] frame_001550_cam_1: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:02]
+LiDAR-only mode for camera frame_001550_cam_1, skipping image loading [25/06 23:12:02]
+load camera 38[LiDAR Data] Loaded for frame_001550_cam_2: frame=1550, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:02]
+[LiDAR Camera] frame_001550_cam_2: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:02]
+LiDAR-only mode for camera frame_001550_cam_2, skipping image loading [25/06 23:12:02]
+load camera 39[LiDAR Data] Loaded for frame_001551_cam_0: frame=1551, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:02]
+[LiDAR Camera] frame_001551_cam_0: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:02]
+LiDAR-only mode for camera frame_001551_cam_0, skipping image loading [25/06 23:12:02]
+load camera 40[LiDAR Data] Loaded for frame_001551_cam_1: frame=1551, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:02]
+[LiDAR Camera] frame_001551_cam_1: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:02]
+LiDAR-only mode for camera frame_001551_cam_1, skipping image loading [25/06 23:12:02]
+load camera 41[LiDAR Data] Loaded for frame_001551_cam_2: frame=1551, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:02]
+[LiDAR Camera] frame_001551_cam_2: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:02]
+LiDAR-only mode for camera frame_001551_cam_2, skipping image loading [25/06 23:12:02]
+load camera 42[LiDAR Data] Loaded for frame_001552_cam_0: frame=1552, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:02]
+[LiDAR Camera] frame_001552_cam_0: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:02]
+LiDAR-only mode for camera frame_001552_cam_0, skipping image loading [25/06 23:12:02]
+load camera 43[LiDAR Data] Loaded for frame_001552_cam_1: frame=1552, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:03]
+[LiDAR Camera] frame_001552_cam_1: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:03]
+LiDAR-only mode for camera frame_001552_cam_1, skipping image loading [25/06 23:12:03]
+load camera 44[LiDAR Data] Loaded for frame_001552_cam_2: frame=1552, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:03]
+[LiDAR Camera] frame_001552_cam_2: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:03]
+LiDAR-only mode for camera frame_001552_cam_2, skipping image loading [25/06 23:12:03]
+load camera 45[LiDAR Data] Loaded for frame_001553_cam_0: frame=1553, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:03]
+[LiDAR Camera] frame_001553_cam_0: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:03]
+LiDAR-only mode for camera frame_001553_cam_0, skipping image loading [25/06 23:12:03]
+load camera 46[LiDAR Data] Loaded for frame_001553_cam_1: frame=1553, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:03]
+[LiDAR Camera] frame_001553_cam_1: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:03]
+LiDAR-only mode for camera frame_001553_cam_1, skipping image loading [25/06 23:12:03]
+load camera 47[LiDAR Data] Loaded for frame_001553_cam_2: frame=1553, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:03]
+[LiDAR Camera] frame_001553_cam_2: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:03]
+LiDAR-only mode for camera frame_001553_cam_2, skipping image loading [25/06 23:12:03]
+load camera 48[LiDAR Data] Loaded for frame_001554_cam_0: frame=1554, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:04]
+[LiDAR Camera] frame_001554_cam_0: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:04]
+LiDAR-only mode for camera frame_001554_cam_0, skipping image loading [25/06 23:12:04]
+load camera 49[LiDAR Data] Loaded for frame_001554_cam_1: frame=1554, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:04]
+[LiDAR Camera] frame_001554_cam_1: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:04]
+LiDAR-only mode for camera frame_001554_cam_1, skipping image loading [25/06 23:12:04]
+load camera 50[LiDAR Data] Loaded for frame_001554_cam_2: frame=1554, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:04]
+[LiDAR Camera] frame_001554_cam_2: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:04]
+LiDAR-only mode for camera frame_001554_cam_2, skipping image loading [25/06 23:12:04]
+load camera 51[LiDAR Data] Loaded for frame_001555_cam_0: frame=1555, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:04]
+[LiDAR Camera] frame_001555_cam_0: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:04]
+LiDAR-only mode for camera frame_001555_cam_0, skipping image loading [25/06 23:12:04]
+load camera 52[LiDAR Data] Loaded for frame_001555_cam_1: frame=1555, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:04]
+[LiDAR Camera] frame_001555_cam_1: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:04]
+LiDAR-only mode for camera frame_001555_cam_1, skipping image loading [25/06 23:12:04]
+load camera 53[LiDAR Data] Loaded for frame_001555_cam_2: frame=1555, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:05]
+[LiDAR Camera] frame_001555_cam_2: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:05]
+LiDAR-only mode for camera frame_001555_cam_2, skipping image loading [25/06 23:12:05]
+load camera 54[LiDAR Data] Loaded for frame_001556_cam_0: frame=1556, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:05]
+[LiDAR Camera] frame_001556_cam_0: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:05]
+LiDAR-only mode for camera frame_001556_cam_0, skipping image loading [25/06 23:12:05]
+load camera 55[LiDAR Data] Loaded for frame_001556_cam_1: frame=1556, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:05]
+[LiDAR Camera] frame_001556_cam_1: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:05]
+LiDAR-only mode for camera frame_001556_cam_1, skipping image loading [25/06 23:12:05]
+load camera 56[LiDAR Data] Loaded for frame_001556_cam_2: frame=1556, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:05]
+[LiDAR Camera] frame_001556_cam_2: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:05]
+LiDAR-only mode for camera frame_001556_cam_2, skipping image loading [25/06 23:12:05]
+load camera 57[LiDAR Data] Loaded for frame_001557_cam_0: frame=1557, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:05]
+[LiDAR Camera] frame_001557_cam_0: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:05]
+LiDAR-only mode for camera frame_001557_cam_0, skipping image loading [25/06 23:12:05]
+load camera 58[LiDAR Data] Loaded for frame_001557_cam_1: frame=1557, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:06]
+[LiDAR Camera] frame_001557_cam_1: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:06]
+LiDAR-only mode for camera frame_001557_cam_1, skipping image loading [25/06 23:12:06]
+load camera 59[LiDAR Data] Loaded for frame_001557_cam_2: frame=1557, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:06]
+[LiDAR Camera] frame_001557_cam_2: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:06]
+LiDAR-only mode for camera frame_001557_cam_2, skipping image loading [25/06 23:12:06]
+load camera 60[LiDAR Data] Loaded for frame_001558_cam_0: frame=1558, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:06]
+[LiDAR Camera] frame_001558_cam_0: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:06]
+LiDAR-only mode for camera frame_001558_cam_0, skipping image loading [25/06 23:12:06]
+load camera 61[LiDAR Data] Loaded for frame_001558_cam_1: frame=1558, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:06]
+[LiDAR Camera] frame_001558_cam_1: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:06]
+LiDAR-only mode for camera frame_001558_cam_1, skipping image loading [25/06 23:12:06]
+load camera 62[LiDAR Data] Loaded for frame_001558_cam_2: frame=1558, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:06]
+[LiDAR Camera] frame_001558_cam_2: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:06]
+LiDAR-only mode for camera frame_001558_cam_2, skipping image loading [25/06 23:12:06]
+load camera 63[LiDAR Data] Loaded for frame_001559_cam_0: frame=1559, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:06]
+[LiDAR Camera] frame_001559_cam_0: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:06]
+LiDAR-only mode for camera frame_001559_cam_0, skipping image loading [25/06 23:12:06]
+load camera 64[LiDAR Data] Loaded for frame_001559_cam_1: frame=1559, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:07]
+[LiDAR Camera] frame_001559_cam_1: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:07]
+LiDAR-only mode for camera frame_001559_cam_1, skipping image loading [25/06 23:12:07]
+load camera 65[LiDAR Data] Loaded for frame_001559_cam_2: frame=1559, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:07]
+[LiDAR Camera] frame_001559_cam_2: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:07]
+LiDAR-only mode for camera frame_001559_cam_2, skipping image loading [25/06 23:12:07]
+load camera 66[LiDAR Data] Loaded for frame_001560_cam_0: frame=1560, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:07]
+[LiDAR Camera] frame_001560_cam_0: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:07]
+LiDAR-only mode for camera frame_001560_cam_0, skipping image loading [25/06 23:12:07]
+load camera 67[LiDAR Data] Loaded for frame_001560_cam_1: frame=1560, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:07]
+[LiDAR Camera] frame_001560_cam_1: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:07]
+LiDAR-only mode for camera frame_001560_cam_1, skipping image loading [25/06 23:12:07]
+load camera 68[LiDAR Data] Loaded for frame_001560_cam_2: frame=1560, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:07]
+[LiDAR Camera] frame_001560_cam_2: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:07]
+LiDAR-only mode for camera frame_001560_cam_2, skipping image loading [25/06 23:12:07]
+load camera 69[LiDAR Data] Loaded for frame_001561_cam_0: frame=1561, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:08]
+[LiDAR Camera] frame_001561_cam_0: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:08]
+LiDAR-only mode for camera frame_001561_cam_0, skipping image loading [25/06 23:12:08]
+load camera 70[LiDAR Data] Loaded for frame_001561_cam_1: frame=1561, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:08]
+[LiDAR Camera] frame_001561_cam_1: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:08]
+LiDAR-only mode for camera frame_001561_cam_1, skipping image loading [25/06 23:12:08]
+load camera 71[LiDAR Data] Loaded for frame_001561_cam_2: frame=1561, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:08]
+[LiDAR Camera] frame_001561_cam_2: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:08]
+LiDAR-only mode for camera frame_001561_cam_2, skipping image loading [25/06 23:12:08]
+load camera 72[LiDAR Data] Loaded for frame_001562_cam_0: frame=1562, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:08]
+[LiDAR Camera] frame_001562_cam_0: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:08]
+LiDAR-only mode for camera frame_001562_cam_0, skipping image loading [25/06 23:12:08]
+load camera 73[LiDAR Data] Loaded for frame_001562_cam_1: frame=1562, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:08]
+[LiDAR Camera] frame_001562_cam_1: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:08]
+LiDAR-only mode for camera frame_001562_cam_1, skipping image loading [25/06 23:12:08]
+load camera 74[LiDAR Data] Loaded for frame_001562_cam_2: frame=1562, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:09]
+[LiDAR Camera] frame_001562_cam_2: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:09]
+LiDAR-only mode for camera frame_001562_cam_2, skipping image loading [25/06 23:12:09]
+load camera 75[LiDAR Data] Loaded for frame_001563_cam_0: frame=1563, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:09]
+[LiDAR Camera] frame_001563_cam_0: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:09]
+LiDAR-only mode for camera frame_001563_cam_0, skipping image loading [25/06 23:12:09]
+load camera 76[LiDAR Data] Loaded for frame_001563_cam_1: frame=1563, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:09]
+[LiDAR Camera] frame_001563_cam_1: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:09]
+LiDAR-only mode for camera frame_001563_cam_1, skipping image loading [25/06 23:12:09]
+load camera 77[LiDAR Data] Loaded for frame_001563_cam_2: frame=1563, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:09]
+[LiDAR Camera] frame_001563_cam_2: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:09]
+LiDAR-only mode for camera frame_001563_cam_2, skipping image loading [25/06 23:12:09]
+load camera 78[LiDAR Data] Loaded for frame_001564_cam_0: frame=1564, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:09]
+[LiDAR Camera] frame_001564_cam_0: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:09]
+LiDAR-only mode for camera frame_001564_cam_0, skipping image loading [25/06 23:12:09]
+load camera 79[LiDAR Data] Loaded for frame_001564_cam_1: frame=1564, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:10]
+[LiDAR Camera] frame_001564_cam_1: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:10]
+LiDAR-only mode for camera frame_001564_cam_1, skipping image loading [25/06 23:12:10]
+load camera 80[LiDAR Data] Loaded for frame_001564_cam_2: frame=1564, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:10]
+[LiDAR Camera] frame_001564_cam_2: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:10]
+LiDAR-only mode for camera frame_001564_cam_2, skipping image loading [25/06 23:12:10]
+load camera 81[LiDAR Data] Loaded for frame_001565_cam_0: frame=1565, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:10]
+[LiDAR Camera] frame_001565_cam_0: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:10]
+LiDAR-only mode for camera frame_001565_cam_0, skipping image loading [25/06 23:12:10]
+load camera 82[LiDAR Data] Loaded for frame_001565_cam_1: frame=1565, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:10]
+[LiDAR Camera] frame_001565_cam_1: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:10]
+LiDAR-only mode for camera frame_001565_cam_1, skipping image loading [25/06 23:12:10]
+load camera 83[LiDAR Data] Loaded for frame_001565_cam_2: frame=1565, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:10]
+[LiDAR Camera] frame_001565_cam_2: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:10]
+LiDAR-only mode for camera frame_001565_cam_2, skipping image loading [25/06 23:12:10]
+load camera 84[LiDAR Data] Loaded for frame_001566_cam_0: frame=1566, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:10]
+[LiDAR Camera] frame_001566_cam_0: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:10]
+LiDAR-only mode for camera frame_001566_cam_0, skipping image loading [25/06 23:12:10]
+load camera 85[LiDAR Data] Loaded for frame_001566_cam_1: frame=1566, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:11]
+[LiDAR Camera] frame_001566_cam_1: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:11]
+LiDAR-only mode for camera frame_001566_cam_1, skipping image loading [25/06 23:12:11]
+load camera 86[LiDAR Data] Loaded for frame_001566_cam_2: frame=1566, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:11]
+[LiDAR Camera] frame_001566_cam_2: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:11]
+LiDAR-only mode for camera frame_001566_cam_2, skipping image loading [25/06 23:12:11]
+load camera 87[LiDAR Data] Loaded for frame_001567_cam_0: frame=1567, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:11]
+[LiDAR Camera] frame_001567_cam_0: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:11]
+LiDAR-only mode for camera frame_001567_cam_0, skipping image loading [25/06 23:12:11]
+load camera 88[LiDAR Data] Loaded for frame_001567_cam_1: frame=1567, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:11]
+[LiDAR Camera] frame_001567_cam_1: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:11]
+LiDAR-only mode for camera frame_001567_cam_1, skipping image loading [25/06 23:12:11]
+load camera 89[LiDAR Data] Loaded for frame_001567_cam_2: frame=1567, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:11]
+[LiDAR Camera] frame_001567_cam_2: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:11]
+LiDAR-only mode for camera frame_001567_cam_2, skipping image loading [25/06 23:12:11]
+load camera 90[LiDAR Data] Loaded for frame_001568_cam_0: frame=1568, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:12]
+[LiDAR Camera] frame_001568_cam_0: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:12]
+LiDAR-only mode for camera frame_001568_cam_0, skipping image loading [25/06 23:12:12]
+load camera 91[LiDAR Data] Loaded for frame_001568_cam_1: frame=1568, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:12]
+[LiDAR Camera] frame_001568_cam_1: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:12]
+LiDAR-only mode for camera frame_001568_cam_1, skipping image loading [25/06 23:12:12]
+load camera 92[LiDAR Data] Loaded for frame_001568_cam_2: frame=1568, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:12]
+[LiDAR Camera] frame_001568_cam_2: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:12]
+LiDAR-only mode for camera frame_001568_cam_2, skipping image loading [25/06 23:12:12]
+load camera 93[LiDAR Data] Loaded for frame_001569_cam_0: frame=1569, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:12]
+[LiDAR Camera] frame_001569_cam_0: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:12]
+LiDAR-only mode for camera frame_001569_cam_0, skipping image loading [25/06 23:12:12]
+load camera 94[LiDAR Data] Loaded for frame_001569_cam_1: frame=1569, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:12]
+[LiDAR Camera] frame_001569_cam_1: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:12]
+LiDAR-only mode for camera frame_001569_cam_1, skipping image loading [25/06 23:12:12]
+load camera 95[LiDAR Data] Loaded for frame_001569_cam_2: frame=1569, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:13]
+[LiDAR Camera] frame_001569_cam_2: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:13]
+LiDAR-only mode for camera frame_001569_cam_2, skipping image loading [25/06 23:12:13]
+load camera 96[LiDAR Data] Loaded for frame_001570_cam_0: frame=1570, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:13]
+[LiDAR Camera] frame_001570_cam_0: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:13]
+LiDAR-only mode for camera frame_001570_cam_0, skipping image loading [25/06 23:12:13]
+load camera 97[LiDAR Data] Loaded for frame_001570_cam_1: frame=1570, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:13]
+[LiDAR Camera] frame_001570_cam_1: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:13]
+LiDAR-only mode for camera frame_001570_cam_1, skipping image loading [25/06 23:12:13]
+load camera 98[LiDAR Data] Loaded for frame_001570_cam_2: frame=1570, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:13]
+[LiDAR Camera] frame_001570_cam_2: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:13]
+LiDAR-only mode for camera frame_001570_cam_2, skipping image loading [25/06 23:12:13]
+load camera 99[LiDAR Data] Loaded for frame_001571_cam_0: frame=1571, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:13]
+[LiDAR Camera] frame_001571_cam_0: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:13]
+LiDAR-only mode for camera frame_001571_cam_0, skipping image loading [25/06 23:12:13]
+load camera 100[LiDAR Data] Loaded for frame_001571_cam_1: frame=1571, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:14]
+[LiDAR Camera] frame_001571_cam_1: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:14]
+LiDAR-only mode for camera frame_001571_cam_1, skipping image loading [25/06 23:12:14]
+load camera 101[LiDAR Data] Loaded for frame_001571_cam_2: frame=1571, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:14]
+[LiDAR Camera] frame_001571_cam_2: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:14]
+LiDAR-only mode for camera frame_001571_cam_2, skipping image loading [25/06 23:12:14]
+load camera 102[LiDAR Data] Loaded for frame_001572_cam_0: frame=1572, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:14]
+[LiDAR Camera] frame_001572_cam_0: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:14]
+LiDAR-only mode for camera frame_001572_cam_0, skipping image loading [25/06 23:12:14]
+load camera 103[LiDAR Data] Loaded for frame_001572_cam_1: frame=1572, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:14]
+[LiDAR Camera] frame_001572_cam_1: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:14]
+LiDAR-only mode for camera frame_001572_cam_1, skipping image loading [25/06 23:12:14]
+load camera 104[LiDAR Data] Loaded for frame_001572_cam_2: frame=1572, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:14]
+[LiDAR Camera] frame_001572_cam_2: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:14]
+LiDAR-only mode for camera frame_001572_cam_2, skipping image loading [25/06 23:12:14]
+load camera 105[LiDAR Data] Loaded for frame_001573_cam_0: frame=1573, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:15]
+[LiDAR Camera] frame_001573_cam_0: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:15]
+LiDAR-only mode for camera frame_001573_cam_0, skipping image loading [25/06 23:12:15]
+load camera 106[LiDAR Data] Loaded for frame_001573_cam_1: frame=1573, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:15]
+[LiDAR Camera] frame_001573_cam_1: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:15]
+LiDAR-only mode for camera frame_001573_cam_1, skipping image loading [25/06 23:12:15]
+load camera 107[LiDAR Data] Loaded for frame_001573_cam_2: frame=1573, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:15]
+[LiDAR Camera] frame_001573_cam_2: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:15]
+LiDAR-only mode for camera frame_001573_cam_2, skipping image loading [25/06 23:12:15]
+load camera 108[LiDAR Data] Loaded for frame_001574_cam_0: frame=1574, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:15]
+[LiDAR Camera] frame_001574_cam_0: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:15]
+LiDAR-only mode for camera frame_001574_cam_0, skipping image loading [25/06 23:12:15]
+load camera 109[LiDAR Data] Loaded for frame_001574_cam_1: frame=1574, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:15]
+[LiDAR Camera] frame_001574_cam_1: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:15]
+LiDAR-only mode for camera frame_001574_cam_1, skipping image loading [25/06 23:12:15]
+load camera 110[LiDAR Data] Loaded for frame_001574_cam_2: frame=1574, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:16]
+[LiDAR Camera] frame_001574_cam_2: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:16]
+LiDAR-only mode for camera frame_001574_cam_2, skipping image loading [25/06 23:12:16]
+load camera 111[LiDAR Data] Loaded for frame_001575_cam_0: frame=1575, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:16]
+[LiDAR Camera] frame_001575_cam_0: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:16]
+LiDAR-only mode for camera frame_001575_cam_0, skipping image loading [25/06 23:12:16]
+load camera 112[LiDAR Data] Loaded for frame_001575_cam_1: frame=1575, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:16]
+[LiDAR Camera] frame_001575_cam_1: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:16]
+LiDAR-only mode for camera frame_001575_cam_1, skipping image loading [25/06 23:12:16]
+load camera 113[LiDAR Data] Loaded for frame_001575_cam_2: frame=1575, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:16]
+[LiDAR Camera] frame_001575_cam_2: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:16]
+LiDAR-only mode for camera frame_001575_cam_2, skipping image loading [25/06 23:12:16]
+load camera 114[LiDAR Data] Loaded for frame_001576_cam_0: frame=1576, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:16]
+[LiDAR Camera] frame_001576_cam_0: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:16]
+LiDAR-only mode for camera frame_001576_cam_0, skipping image loading [25/06 23:12:16]
+load camera 115[LiDAR Data] Loaded for frame_001576_cam_1: frame=1576, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:17]
+[LiDAR Camera] frame_001576_cam_1: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:17]
+LiDAR-only mode for camera frame_001576_cam_1, skipping image loading [25/06 23:12:17]
+load camera 116[LiDAR Data] Loaded for frame_001576_cam_2: frame=1576, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:17]
+[LiDAR Camera] frame_001576_cam_2: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:17]
+LiDAR-only mode for camera frame_001576_cam_2, skipping image loading [25/06 23:12:17]
+load camera 117[LiDAR Data] Loaded for frame_001577_cam_0: frame=1577, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:17]
+[LiDAR Camera] frame_001577_cam_0: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:17]
+LiDAR-only mode for camera frame_001577_cam_0, skipping image loading [25/06 23:12:17]
+load camera 118[LiDAR Data] Loaded for frame_001577_cam_1: frame=1577, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:17]
+[LiDAR Camera] frame_001577_cam_1: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:17]
+LiDAR-only mode for camera frame_001577_cam_1, skipping image loading [25/06 23:12:17]
+load camera 119[LiDAR Data] Loaded for frame_001577_cam_2: frame=1577, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:17]
+[LiDAR Camera] frame_001577_cam_2: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:17]
+LiDAR-only mode for camera frame_001577_cam_2, skipping image loading [25/06 23:12:17]
+load camera 120[LiDAR Data] Loaded for frame_001578_cam_0: frame=1578, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:18]
+[LiDAR Camera] frame_001578_cam_0: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:18]
+LiDAR-only mode for camera frame_001578_cam_0, skipping image loading [25/06 23:12:18]
+load camera 121[LiDAR Data] Loaded for frame_001578_cam_1: frame=1578, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:18]
+[LiDAR Camera] frame_001578_cam_1: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:18]
+LiDAR-only mode for camera frame_001578_cam_1, skipping image loading [25/06 23:12:18]
+load camera 122[LiDAR Data] Loaded for frame_001578_cam_2: frame=1578, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:18]
+[LiDAR Camera] frame_001578_cam_2: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:18]
+LiDAR-only mode for camera frame_001578_cam_2, skipping image loading [25/06 23:12:18]
+load camera 123[LiDAR Data] Loaded for frame_001579_cam_0: frame=1579, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:18]
+[LiDAR Camera] frame_001579_cam_0: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:18]
+LiDAR-only mode for camera frame_001579_cam_0, skipping image loading [25/06 23:12:18]
+load camera 124[LiDAR Data] Loaded for frame_001579_cam_1: frame=1579, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:18]
+[LiDAR Camera] frame_001579_cam_1: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:18]
+LiDAR-only mode for camera frame_001579_cam_1, skipping image loading [25/06 23:12:18]
+load camera 125[LiDAR Data] Loaded for frame_001579_cam_2: frame=1579, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:19]
+[LiDAR Camera] frame_001579_cam_2: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:19]
+LiDAR-only mode for camera frame_001579_cam_2, skipping image loading [25/06 23:12:19]
+load camera 126[LiDAR Data] Loaded for frame_001580_cam_0: frame=1580, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:19]
+[LiDAR Camera] frame_001580_cam_0: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:19]
+LiDAR-only mode for camera frame_001580_cam_0, skipping image loading [25/06 23:12:19]
+load camera 127[LiDAR Data] Loaded for frame_001580_cam_1: frame=1580, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:19]
+[LiDAR Camera] frame_001580_cam_1: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:19]
+LiDAR-only mode for camera frame_001580_cam_1, skipping image loading [25/06 23:12:19]
+load camera 128[LiDAR Data] Loaded for frame_001580_cam_2: frame=1580, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:19]
+[LiDAR Camera] frame_001580_cam_2: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:19]
+LiDAR-only mode for camera frame_001580_cam_2, skipping image loading [25/06 23:12:19]
+load camera 129[LiDAR Data] Loaded for frame_001581_cam_0: frame=1581, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:19]
+[LiDAR Camera] frame_001581_cam_0: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:19]
+LiDAR-only mode for camera frame_001581_cam_0, skipping image loading [25/06 23:12:19]
+load camera 130[LiDAR Data] Loaded for frame_001581_cam_1: frame=1581, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:20]
+[LiDAR Camera] frame_001581_cam_1: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:20]
+LiDAR-only mode for camera frame_001581_cam_1, skipping image loading [25/06 23:12:20]
+load camera 131[LiDAR Data] Loaded for frame_001581_cam_2: frame=1581, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:20]
+[LiDAR Camera] frame_001581_cam_2: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:20]
+LiDAR-only mode for camera frame_001581_cam_2, skipping image loading [25/06 23:12:20]
+load camera 132[LiDAR Data] Loaded for frame_001582_cam_0: frame=1582, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:20]
+[LiDAR Camera] frame_001582_cam_0: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:20]
+LiDAR-only mode for camera frame_001582_cam_0, skipping image loading [25/06 23:12:20]
+load camera 133[LiDAR Data] Loaded for frame_001582_cam_1: frame=1582, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:20]
+[LiDAR Camera] frame_001582_cam_1: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:20]
+LiDAR-only mode for camera frame_001582_cam_1, skipping image loading [25/06 23:12:20]
+load camera 134[LiDAR Data] Loaded for frame_001582_cam_2: frame=1582, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:20]
+[LiDAR Camera] frame_001582_cam_2: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:20]
+LiDAR-only mode for camera frame_001582_cam_2, skipping image loading [25/06 23:12:20]
+load camera 135[LiDAR Data] Loaded for frame_001583_cam_0: frame=1583, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:21]
+[LiDAR Camera] frame_001583_cam_0: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:21]
+LiDAR-only mode for camera frame_001583_cam_0, skipping image loading [25/06 23:12:21]
+load camera 136[LiDAR Data] Loaded for frame_001583_cam_1: frame=1583, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:21]
+[LiDAR Camera] frame_001583_cam_1: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:21]
+LiDAR-only mode for camera frame_001583_cam_1, skipping image loading [25/06 23:12:21]
+load camera 137[LiDAR Data] Loaded for frame_001583_cam_2: frame=1583, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:21]
+[LiDAR Camera] frame_001583_cam_2: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:21]
+LiDAR-only mode for camera frame_001583_cam_2, skipping image loading [25/06 23:12:21]
+load camera 138[LiDAR Data] Loaded for frame_001584_cam_0: frame=1584, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:21]
+[LiDAR Camera] frame_001584_cam_0: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:21]
+LiDAR-only mode for camera frame_001584_cam_0, skipping image loading [25/06 23:12:21]
+load camera 139[LiDAR Data] Loaded for frame_001584_cam_1: frame=1584, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:21]
+[LiDAR Camera] frame_001584_cam_1: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:21]
+LiDAR-only mode for camera frame_001584_cam_1, skipping image loading [25/06 23:12:21]
+load camera 140[LiDAR Data] Loaded for frame_001584_cam_2: frame=1584, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:22]
+[LiDAR Camera] frame_001584_cam_2: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:22]
+LiDAR-only mode for camera frame_001584_cam_2, skipping image loading [25/06 23:12:22]
+load camera 141[LiDAR Data] Loaded for frame_001585_cam_0: frame=1585, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:22]
+[LiDAR Camera] frame_001585_cam_0: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:22]
+LiDAR-only mode for camera frame_001585_cam_0, skipping image loading [25/06 23:12:22]
+load camera 142[LiDAR Data] Loaded for frame_001585_cam_1: frame=1585, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:22]
+[LiDAR Camera] frame_001585_cam_1: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:22]
+LiDAR-only mode for camera frame_001585_cam_1, skipping image loading [25/06 23:12:22]
+load camera 143[LiDAR Data] Loaded for frame_001585_cam_2: frame=1585, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:22]
+[LiDAR Camera] frame_001585_cam_2: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:22]
+LiDAR-only mode for camera frame_001585_cam_2, skipping image loading [25/06 23:12:22]
+load camera 144[LiDAR Data] Loaded for frame_001586_cam_0: frame=1586, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:22]
+[LiDAR Camera] frame_001586_cam_0: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:22]
+LiDAR-only mode for camera frame_001586_cam_0, skipping image loading [25/06 23:12:22]
+load camera 145[LiDAR Data] Loaded for frame_001586_cam_1: frame=1586, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:22]
+[LiDAR Camera] frame_001586_cam_1: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:22]
+LiDAR-only mode for camera frame_001586_cam_1, skipping image loading [25/06 23:12:22]
+load camera 146[LiDAR Data] Loaded for frame_001586_cam_2: frame=1586, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:23]
+[LiDAR Camera] frame_001586_cam_2: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:23]
+LiDAR-only mode for camera frame_001586_cam_2, skipping image loading [25/06 23:12:23]
+load camera 147[LiDAR Data] Loaded for frame_001587_cam_0: frame=1587, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:23]
+[LiDAR Camera] frame_001587_cam_0: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:23]
+LiDAR-only mode for camera frame_001587_cam_0, skipping image loading [25/06 23:12:23]
+load camera 148[LiDAR Data] Loaded for frame_001587_cam_1: frame=1587, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:23]
+[LiDAR Camera] frame_001587_cam_1: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:23]
+LiDAR-only mode for camera frame_001587_cam_1, skipping image loading [25/06 23:12:23]
+load camera 149[LiDAR Data] Loaded for frame_001587_cam_2: frame=1587, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:23]
+[LiDAR Camera] frame_001587_cam_2: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:23]
+LiDAR-only mode for camera frame_001587_cam_2, skipping image loading [25/06 23:12:23]
+load camera 150[LiDAR Data] Loaded for frame_001588_cam_0: frame=1588, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:24]
+[LiDAR Camera] frame_001588_cam_0: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:24]
+LiDAR-only mode for camera frame_001588_cam_0, skipping image loading [25/06 23:12:24]
+load camera 151[LiDAR Data] Loaded for frame_001588_cam_1: frame=1588, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:24]
+[LiDAR Camera] frame_001588_cam_1: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:24]
+LiDAR-only mode for camera frame_001588_cam_1, skipping image loading [25/06 23:12:24]
+load camera 152[LiDAR Data] Loaded for frame_001588_cam_2: frame=1588, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:24]
+[LiDAR Camera] frame_001588_cam_2: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:24]
+LiDAR-only mode for camera frame_001588_cam_2, skipping image loading [25/06 23:12:24]
+load camera 153[LiDAR Data] Loaded for frame_001589_cam_0: frame=1589, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:24]
+[LiDAR Camera] frame_001589_cam_0: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:24]
+LiDAR-only mode for camera frame_001589_cam_0, skipping image loading [25/06 23:12:24]
+load camera 154[LiDAR Data] Loaded for frame_001589_cam_1: frame=1589, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:24]
+[LiDAR Camera] frame_001589_cam_1: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:24]
+LiDAR-only mode for camera frame_001589_cam_1, skipping image loading [25/06 23:12:24]
+load camera 155[LiDAR Data] Loaded for frame_001589_cam_2: frame=1589, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:24]
+[LiDAR Camera] frame_001589_cam_2: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:24]
+LiDAR-only mode for camera frame_001589_cam_2, skipping image loading [25/06 23:12:24]
+load camera 156[LiDAR Data] Loaded for frame_001590_cam_0: frame=1590, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:25]
+[LiDAR Camera] frame_001590_cam_0: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:25]
+LiDAR-only mode for camera frame_001590_cam_0, skipping image loading [25/06 23:12:25]
+load camera 157[LiDAR Data] Loaded for frame_001590_cam_1: frame=1590, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:25]
+[LiDAR Camera] frame_001590_cam_1: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:25]
+LiDAR-only mode for camera frame_001590_cam_1, skipping image loading [25/06 23:12:25]
+load camera 158[LiDAR Data] Loaded for frame_001590_cam_2: frame=1590, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:25]
+[LiDAR Camera] frame_001590_cam_2: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:25]
+LiDAR-only mode for camera frame_001590_cam_2, skipping image loading [25/06 23:12:25]
+load camera 159[LiDAR Data] Loaded for frame_001591_cam_0: frame=1591, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:25]
+[LiDAR Camera] frame_001591_cam_0: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:25]
+LiDAR-only mode for camera frame_001591_cam_0, skipping image loading [25/06 23:12:25]
+load camera 160[LiDAR Data] Loaded for frame_001591_cam_1: frame=1591, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:25]
+[LiDAR Camera] frame_001591_cam_1: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:25]
+LiDAR-only mode for camera frame_001591_cam_1, skipping image loading [25/06 23:12:25]
+load camera 161[LiDAR Data] Loaded for frame_001591_cam_2: frame=1591, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:26]
+[LiDAR Camera] frame_001591_cam_2: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:26]
+LiDAR-only mode for camera frame_001591_cam_2, skipping image loading [25/06 23:12:26]
+load camera 162[LiDAR Data] Loaded for frame_001592_cam_0: frame=1592, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:26]
+[LiDAR Camera] frame_001592_cam_0: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:26]
+LiDAR-only mode for camera frame_001592_cam_0, skipping image loading [25/06 23:12:26]
+load camera 163[LiDAR Data] Loaded for frame_001592_cam_1: frame=1592, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:26]
+[LiDAR Camera] frame_001592_cam_1: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:26]
+LiDAR-only mode for camera frame_001592_cam_1, skipping image loading [25/06 23:12:26]
+load camera 164[LiDAR Data] Loaded for frame_001592_cam_2: frame=1592, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:26]
+[LiDAR Camera] frame_001592_cam_2: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:26]
+LiDAR-only mode for camera frame_001592_cam_2, skipping image loading [25/06 23:12:26]
+load camera 165[LiDAR Data] Loaded for frame_001593_cam_0: frame=1593, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:26]
+[LiDAR Camera] frame_001593_cam_0: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:26]
+LiDAR-only mode for camera frame_001593_cam_0, skipping image loading [25/06 23:12:26]
+load camera 166[LiDAR Data] Loaded for frame_001593_cam_1: frame=1593, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:27]
+[LiDAR Camera] frame_001593_cam_1: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:27]
+LiDAR-only mode for camera frame_001593_cam_1, skipping image loading [25/06 23:12:27]
+load camera 167[LiDAR Data] Loaded for frame_001593_cam_2: frame=1593, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:27]
+[LiDAR Camera] frame_001593_cam_2: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:27]
+LiDAR-only mode for camera frame_001593_cam_2, skipping image loading [25/06 23:12:27]
+load camera 168[LiDAR Data] Loaded for frame_001594_cam_0: frame=1594, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:27]
+[LiDAR Camera] frame_001594_cam_0: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:27]
+LiDAR-only mode for camera frame_001594_cam_0, skipping image loading [25/06 23:12:27]
+load camera 169[LiDAR Data] Loaded for frame_001594_cam_1: frame=1594, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:27]
+[LiDAR Camera] frame_001594_cam_1: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:27]
+LiDAR-only mode for camera frame_001594_cam_1, skipping image loading [25/06 23:12:27]
+load camera 170[LiDAR Data] Loaded for frame_001594_cam_2: frame=1594, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:27]
+[LiDAR Camera] frame_001594_cam_2: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:27]
+LiDAR-only mode for camera frame_001594_cam_2, skipping image loading [25/06 23:12:27]
+load camera 171[LiDAR Data] Loaded for frame_001595_cam_0: frame=1595, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:28]
+[LiDAR Camera] frame_001595_cam_0: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:28]
+LiDAR-only mode for camera frame_001595_cam_0, skipping image loading [25/06 23:12:28]
+load camera 172[LiDAR Data] Loaded for frame_001595_cam_1: frame=1595, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:28]
+[LiDAR Camera] frame_001595_cam_1: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:28]
+LiDAR-only mode for camera frame_001595_cam_1, skipping image loading [25/06 23:12:28]
+load camera 173[LiDAR Data] Loaded for frame_001595_cam_2: frame=1595, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:28]
+[LiDAR Camera] frame_001595_cam_2: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:28]
+LiDAR-only mode for camera frame_001595_cam_2, skipping image loading [25/06 23:12:28]
+load camera 174[LiDAR Data] Loaded for frame_001596_cam_0: frame=1596, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:28]
+[LiDAR Camera] frame_001596_cam_0: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:28]
+LiDAR-only mode for camera frame_001596_cam_0, skipping image loading [25/06 23:12:28]
+load camera 175[LiDAR Data] Loaded for frame_001596_cam_1: frame=1596, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:28]
+[LiDAR Camera] frame_001596_cam_1: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:28]
+LiDAR-only mode for camera frame_001596_cam_1, skipping image loading [25/06 23:12:28]
+load camera 176[LiDAR Data] Loaded for frame_001596_cam_2: frame=1596, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:28]
+[LiDAR Camera] frame_001596_cam_2: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:28]
+LiDAR-only mode for camera frame_001596_cam_2, skipping image loading [25/06 23:12:28]
+load camera 177[LiDAR Data] Loaded for frame_001597_cam_0: frame=1597, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:29]
+[LiDAR Camera] frame_001597_cam_0: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:29]
+LiDAR-only mode for camera frame_001597_cam_0, skipping image loading [25/06 23:12:29]
+load camera 178[LiDAR Data] Loaded for frame_001597_cam_1: frame=1597, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:29]
+[LiDAR Camera] frame_001597_cam_1: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:29]
+LiDAR-only mode for camera frame_001597_cam_1, skipping image loading [25/06 23:12:29]
+load camera 179[LiDAR Data] Loaded for frame_001597_cam_2: frame=1597, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:29]
+[LiDAR Camera] frame_001597_cam_2: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:29]
+LiDAR-only mode for camera frame_001597_cam_2, skipping image loading [25/06 23:12:29]
+load camera 180[LiDAR Data] Loaded for frame_001598_cam_0: frame=1598, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:29]
+[LiDAR Camera] frame_001598_cam_0: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:29]
+LiDAR-only mode for camera frame_001598_cam_0, skipping image loading [25/06 23:12:29]
+load camera 181[LiDAR Data] Loaded for frame_001598_cam_1: frame=1598, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:29]
+[LiDAR Camera] frame_001598_cam_1: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:29]
+LiDAR-only mode for camera frame_001598_cam_1, skipping image loading [25/06 23:12:29]
+load camera 182[LiDAR Data] Loaded for frame_001598_cam_2: frame=1598, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:30]
+[LiDAR Camera] frame_001598_cam_2: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:30]
+LiDAR-only mode for camera frame_001598_cam_2, skipping image loading [25/06 23:12:30]
+load camera 183[LiDAR Data] Loaded for frame_001599_cam_0: frame=1599, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:30]
+[LiDAR Camera] frame_001599_cam_0: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:30]
+LiDAR-only mode for camera frame_001599_cam_0, skipping image loading [25/06 23:12:30]
+load camera 184[LiDAR Data] Loaded for frame_001599_cam_1: frame=1599, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:30]
+[LiDAR Camera] frame_001599_cam_1: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:30]
+LiDAR-only mode for camera frame_001599_cam_1, skipping image loading [25/06 23:12:30]
+load camera 185[LiDAR Data] Loaded for frame_001599_cam_2: frame=1599, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:30]
+[LiDAR Camera] frame_001599_cam_2: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:30]
+LiDAR-only mode for camera frame_001599_cam_2, skipping image loading [25/06 23:12:30]
+load camera 186[LiDAR Data] Loaded for frame_001600_cam_0: frame=1600, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:30]
+[LiDAR Camera] frame_001600_cam_0: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:30]
+LiDAR-only mode for camera frame_001600_cam_0, skipping image loading [25/06 23:12:30]
+load camera 187[LiDAR Data] Loaded for frame_001600_cam_1: frame=1600, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:30]
+[LiDAR Camera] frame_001600_cam_1: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:30]
+LiDAR-only mode for camera frame_001600_cam_1, skipping image loading [25/06 23:12:30]
+load camera 188[LiDAR Data] Loaded for frame_001600_cam_2: frame=1600, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:31]
+[LiDAR Camera] frame_001600_cam_2: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:31]
+LiDAR-only mode for camera frame_001600_cam_2, skipping image loading [25/06 23:12:31]
+load camera 189[LiDAR Data] Loaded for frame_001601_cam_0: frame=1601, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:31]
+[LiDAR Camera] frame_001601_cam_0: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:31]
+LiDAR-only mode for camera frame_001601_cam_0, skipping image loading [25/06 23:12:31]
+load camera 190[LiDAR Data] Loaded for frame_001601_cam_1: frame=1601, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:31]
+[LiDAR Camera] frame_001601_cam_1: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:31]
+LiDAR-only mode for camera frame_001601_cam_1, skipping image loading [25/06 23:12:31]
+load camera 191[LiDAR Data] Loaded for frame_001601_cam_2: frame=1601, range_img=(66, 343), intensity_img=(66, 343) [25/06 23:12:31]
+[LiDAR Camera] frame_001601_cam_2: Range torch.Size([66, 343]), Intensity torch.Size([66, 343]) [25/06 23:12:31]
+LiDAR-only mode for camera frame_001601_cam_2, skipping image loading [25/06 23:12:31]
+Loading Test Cameras [25/06 23:12:31]
+computing nearest_id [25/06 23:12:31]
+Number of points at initialisation :  113683 [25/06 23:12:31]
+Training with 192 cameras (192 frames) [25/06 23:12:31]
+Tensorboard logging to: output/lidar_pgsr_kitti360/seq00_static_test/20250625-231154/tensorboard [25/06 23:12:31]
+Training progress:   0%|          | 0/20000 [00:00<?, ?it/s]Training progress:   0%|          | 0/20000 [00:01<?, ?it/s, Loss=2.6635624]Training progress:   0%|          | 10/20000 [00:01<47:43,  6.98it/s, Loss=2.6635624]Training progress:   0%|          | 10/20000 [00:02<47:43,  6.98it/s, Loss=2.5118002]Training progress:   0%|          | 20/20000 [00:02<42:00,  7.93it/s, Loss=2.5118002]Training progress:   0%|          | 20/20000 [00:03<42:00,  7.93it/s, Loss=3.3981670]Training progress:   0%|          | 30/20000 [00:03<38:50,  8.57it/s, Loss=3.3981670]Training progress:   0%|          | 30/20000 [00:04<38:50,  8.57it/s, Loss=2.7180027]Training progress:   0%|          | 40/20000 [00:04<37:25,  8.89it/s, Loss=2.7180027]Training progress:   0%|          | 40/20000 [00:05<37:25,  8.89it/s, Loss=2.8247262]Training progress:   0%|          | 50/20000 [00:05<36:33,  9.09it/s, Loss=2.8247262]Training progress:   0%|          | 50/20000 [00:06<36:33,  9.09it/s, Loss=2.6049606]Training progress:   0%|          | 60/20000 [00:06<36:34,  9.08it/s, Loss=2.6049606]Training progress:   0%|          | 60/20000 [00:07<36:34,  9.08it/s, Loss=2.4383716]Training progress:   0%|          | 70/20000 [00:07<36:54,  9.00it/s, Loss=2.4383716]Training progress:   0%|          | 70/20000 [00:09<36:54,  9.00it/s, Loss=2.5480558]Training progress:   0%|          | 80/20000 [00:09<37:32,  8.84it/s, Loss=2.5480558]

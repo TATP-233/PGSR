@@ -19,7 +19,8 @@ from gaussian_renderer import render
 import torchvision
 from utils.general_utils import safe_state
 from argparse import ArgumentParser
-from arguments import ModelParams, PipelineParams, get_combined_args
+# from arguments import ModelParams, PipelineParams, get_combined_args
+# 临时注释掉参数导入，现在使用配置文件系统
 from gaussian_renderer import GaussianModel
 import numpy as np
 import cv2
@@ -134,7 +135,7 @@ def render_set(model_path, name, iteration, views, scene, gaussians, pipeline, b
                 o3d.camera.PinholeCameraIntrinsic(W, H, view.Fx, view.Fy, view.Cx, view.Cy),
                 pose)
 
-def render_sets(dataset : ModelParams, iteration : int, pipeline : PipelineParams, skip_train : bool, skip_test : bool,
+def render_sets(dataset, iteration : int, pipeline, skip_train : bool, skip_test : bool,
                  max_depth : float, voxel_size : float, num_cluster: int, use_depth_filter : bool):
     with torch.no_grad():
         gaussians = GaussianModel(dataset.sh_degree)
@@ -174,8 +175,10 @@ if __name__ == "__main__":
     torch.set_num_threads(8)
     # Set up command line argument parser
     parser = ArgumentParser(description="Testing script parameters")
-    model = ModelParams(parser, sentinel=True)
-    pipeline = PipelineParams(parser)
+    # model = ModelParams(parser, sentinel=True)
+    # pipeline = PipelineParams(parser)
+    # 临时注释掉，使用配置文件系统
+    print("[Warning] render.py needs to be updated to use the new config system")
     parser.add_argument("--iteration", default=-1, type=int)
     parser.add_argument("--skip_train", action="store_true")
     parser.add_argument("--skip_test", action="store_true")

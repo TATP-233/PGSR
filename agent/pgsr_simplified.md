@@ -60,20 +60,6 @@ Lmvgeom = (1/V) Σ w(pr) * φ(pr)
 其中 φ(pr) = ||pr - Hnr*Hrn*pr||
 ```
 
-**光度一致性**: 使用NCC确保patch一致性
-```python
-Lmvrgb = (1/V) Σ w(pr) * (1 - NCC(Ir(pr), In(Hrn*pr)))
-```
-
-### 4. 曝光补偿模型
-
-```python
-# 每张图像的曝光系数
-Ii_a = exp(ai) * Ii_r + bi
-
-# 自适应损失选择
-I~ = Ii_a if LSSIM(Ii_r - Ii) < 0.5 else Ii_r
-```
 
 ## 损失函数设计
 

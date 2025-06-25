@@ -87,31 +87,83 @@ class Camera(nn.Module):
         self.preload_img = preload_img
         self.ncc_scale = ncc_scale
         
-        # LiDAR数据存储 - 先设置，再检查
+        # === LiDAR数据处理（参考lidar-rt的设计）===
         self.lidar_data = lidar_data
+        self.is_lidar_camera = False
+        
+        # LiDAR特定属性
+        self.range_image = None
+        self.intensity_image = None
+        self.valid_mask = None
+        self.horizontal_fov_start = None
+        self.horizontal_fov_end = None
+        
         if self.lidar_data is not None:
-            # 将LiDAR数据转移到device
-            self.range_image = torch.tensor(self.lidar_data['range_image'], dtype=torch.float32).to(self.data_device)
-            self.intensity_image = torch.tensor(self.lidar_data['intensity_image'], dtype=torch.float32).to(self.data_device)
-            # 可选：预计算掩码
-            self.valid_mask = (self.range_image > 0).to(self.data_device)
-        else:
-            self.range_image = None
-            self.intensity_image = None
-            self.valid_mask = None
+            self.is_lidar_camera = True
+            try:
+                # 将LiDAR数据转移到device
+                if 'range_image' in self.lidar_data:
+                    range_data = self.lidar_data['range_image']
+                    if isinstance(range_data, np.ndarray):
+                        self.range_image = torch.from_numpy(range_data).float().to(self.data_device)
+                    else:
+                        self.range_image = torch.tensor(range_data, dtype=torch.float32).to(self.data_device)
+                
+                if 'intensity_image' in self.lidar_data:
+                    intensity_data = self.lidar_data['intensity_image']
+                    if isinstance(intensity_data, np.ndarray):
+                        self.intensity_image = torch.from_numpy(intensity_data).float().to(self.data_device)
+                    else:
+                        self.intensity_image = torch.tensor(intensity_data, dtype=torch.float32).to(self.data_device)
+                
+                # 预计算有效掩码
+                if self.range_image is not None:
+                    self.valid_mask = (self.range_image > 0).to(self.data_device)
+                
+                # 处理分割相机的FOV信息
+                if 'horizontal_fov_start' in self.lidar_data:
+                    self.horizontal_fov_start = self.lidar_data['horizontal_fov_start']
+                if 'horizontal_fov_end' in self.lidar_data:
+                    self.horizontal_fov_end = self.lidar_data['horizontal_fov_end']
+                
+                # 处理姿态信息
+                if 'pose' in self.lidar_data:
+                    self.lidar_pose = self.lidar_data['pose']
+                
+                print(f"[LiDAR Camera] {self.image_name}: "
+                      f"Range {self.range_image.shape if self.range_image is not None else 'None'}, "
+                      f"Intensity {self.intensity_image.shape if self.intensity_image is not None else 'None'}")
+                
+            except Exception as e:
+                print(f"[Warning] Error processing LiDAR data for {self.image_name}: {e}")
+                self.is_lidar_camera = False
+                self.range_image = None
+                self.intensity_image = None
+                self.valid_mask = None
+        
+        # 如果没有LiDAR数据但是是特定的相机模式，创建虚拟数据
+        if not self.is_lidar_camera:
+            # 检查是否为120度分割相机
+            if hasattr(self, 'FoVx') and abs(self.FoVx - 2 * np.pi / 3) < 0.1:  # 约120度
+                print(f"[Virtual LiDAR] Creating for 120° camera {self.image_name}")
+                self.range_image = torch.zeros((self.image_height, self.image_width), dtype=torch.float32).to(self.data_device)
+                self.intensity_image = torch.zeros((self.image_height, self.image_width), dtype=torch.float32).to(self.data_device)
+                self.valid_mask = torch.zeros((self.image_height, self.image_width), dtype=torch.bool).to(self.data_device)
+                self.is_lidar_camera = True  # 标记为LiDAR相机（虽然是虚拟的）
         
         # 检查是否为LiDAR-only模式（没有真实图像文件）
         image_exists = os.path.exists(self.image_path) if self.image_path else False
-        is_lidar_only = self.lidar_data is not None and not image_exists
+        is_lidar_only = not image_exists  # 简化：如果没有有效的图像路径就认为是LiDAR模式
         
         if self.preload_img and not is_lidar_only:
             gt_image, gray_image, loaded_mask = process_image(self.image_path, self.resolution, ncc_scale)
             self.original_image = gt_image.to(self.data_device)
             self.original_image_gray = gray_image.to(self.data_device)
             self.mask = loaded_mask
-        elif is_lidar_only:
-            # LiDAR-only模式：创建虚拟图像数据
-            print(f"LiDAR-only mode for camera {self.image_name}, skipping image loading")
+        else:
+            # LiDAR-only模式或不预加载：创建虚拟图像数据
+            if is_lidar_only:
+                print(f"LiDAR-only mode for camera {self.image_name}, skipping image loading")
             # 创建黑色虚拟图像用于兼容性
             self.original_image = torch.zeros((3, self.image_height, self.image_width), dtype=torch.float32).to(self.data_device)
             self.original_image_gray = torch.zeros((1, self.image_height, self.image_width), dtype=torch.float32).to(self.data_device)
@@ -136,27 +188,137 @@ class Camera(nn.Module):
 
     def get_lidar_data(self):
         """
-        获取LiDAR数据
+        获取LiDAR数据（参考lidar-rt的设计）
         
         Returns:
             dict: 包含range_image、intensity_image等LiDAR数据
         """
-        if self.lidar_data is None:
+        if not self.is_lidar_camera:
             return {}
         
         lidar_dict = {
             'range_image': self.range_image,
             'intensity_image': self.intensity_image,
-            'valid_mask': self.valid_mask
+            'valid_mask': self.valid_mask,
+            'is_lidar_camera': self.is_lidar_camera
         }
         
-        # 如果有额外的LiDAR数据字段，也添加进去
-        if 'points' in self.lidar_data:
-            lidar_dict['points'] = self.lidar_data['points']
-        if 'pose' in self.lidar_data:
-            lidar_dict['pose'] = self.lidar_data['pose']
+        # 添加FOV信息
+        if self.horizontal_fov_start is not None:
+            lidar_dict['horizontal_fov_start'] = self.horizontal_fov_start
+        if self.horizontal_fov_end is not None:
+            lidar_dict['horizontal_fov_end'] = self.horizontal_fov_end
+        
+        # 添加原始LiDAR数据中的额外字段
+        if self.lidar_data is not None:
+            if 'points' in self.lidar_data:
+                lidar_dict['points'] = self.lidar_data['points']
+            if 'pose' in self.lidar_data:
+                lidar_dict['pose'] = self.lidar_data['pose']
+            if 'timestamp' in self.lidar_data:
+                lidar_dict['timestamp'] = self.lidar_data['timestamp']
             
         return lidar_dict
+    
+    def get_lidar_rays(self, scale=1.0):
+        """
+        获取LiDAR光线（参考lidar-rt的设计）
+        
+        Args:
+            scale: 缩放因子
+            
+        Returns:
+            ray_origins: 光线起点 (H, W, 3)
+            ray_directions: 光线方向 (H, W, 3)
+        """
+        if not self.is_lidar_camera:
+            return None, None
+        
+        W, H = int(self.image_width/scale), int(self.image_height/scale)
+        
+        # 创建像素坐标网格
+        u, v = torch.meshgrid(
+            torch.arange(W, device=self.data_device, dtype=torch.float32),
+            torch.arange(H, device=self.data_device, dtype=torch.float32),
+            indexing='xy'
+        )
+        
+        # 检查是否是360度LiDAR
+        if abs(self.FoVx - 2 * np.pi) < 0.1:  # 360度
+            # 球坐标投影
+            azimuth = (u / W) * 2 * np.pi - np.pi  # -π 到 π
+            inclination = (v / H) * self.FoVy - (self.FoVy / 2)  # 根据垂直FOV计算
+            
+            # 计算光线方向
+            ray_d_x = torch.cos(inclination) * torch.cos(azimuth)
+            ray_d_y = torch.cos(inclination) * torch.sin(azimuth)
+            ray_d_z = torch.sin(inclination)
+            
+            ray_directions = torch.stack([ray_d_x, ray_d_y, ray_d_z], -1)
+        else:
+            # 普通透视投影
+            ray_d_x = (u - W/2) / (W/2) * torch.tan(torch.tensor(self.FoVx/2))
+            ray_d_y = (v - H/2) / (H/2) * torch.tan(torch.tensor(self.FoVy/2))
+            ray_d_z = torch.ones_like(u)
+            
+            ray_directions = torch.stack([ray_d_x, ray_d_y, ray_d_z], -1)
+            ray_directions = torch.nn.functional.normalize(ray_directions, dim=-1)
+        
+        # 光线起点（相机中心）
+        ray_origins = self.camera_center.expand(H, W, 3)
+        
+        return ray_origins, ray_directions
+    
+    def is_valid_lidar_pixel(self, u, v):
+        """
+        检查像素是否为有效的LiDAR像素
+        
+        Args:
+            u, v: 像素坐标
+            
+        Returns:
+            bool: 是否有效
+        """
+        if not self.is_lidar_camera or self.valid_mask is None:
+            return False
+        
+        if 0 <= u < self.image_width and 0 <= v < self.image_height:
+            return self.valid_mask[v, u].item()
+        return False
+    
+    def get_depth_at_pixel(self, u, v):
+        """
+        获取指定像素的深度值
+        
+        Args:
+            u, v: 像素坐标
+            
+        Returns:
+            float: 深度值，如果无效返回0
+        """
+        if not self.is_lidar_camera or self.range_image is None:
+            return 0.0
+        
+        if 0 <= u < self.image_width and 0 <= v < self.image_height:
+            return self.range_image[v, u].item()
+        return 0.0
+    
+    def get_intensity_at_pixel(self, u, v):
+        """
+        获取指定像素的强度值
+        
+        Args:
+            u, v: 像素坐标
+            
+        Returns:
+            float: 强度值，如果无效返回0
+        """
+        if not self.is_lidar_camera or self.intensity_image is None:
+            return 0.0
+        
+        if 0 <= u < self.image_width and 0 <= v < self.image_height:
+            return self.intensity_image[v, u].item()
+        return 0.0
 
     def get_image(self):
         if self.preload_img:
